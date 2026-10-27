@@ -44,6 +44,21 @@ commit;
 - 화면 확인: A로 로그인하면 메모 읽기·추가·수정·삭제가 그대로 됩니다.
 - 남은 점: 옛 공개 커밋 `61842c0`과 1단계 배포의 메모 노출은 그대로입니다.
 
+### 5단계 가점: 화면 코드에서 Supabase 공개 키 빼기
+
+- 작동: 로그인·로그아웃도 서버 함수 `api/session.js`가 맡습니다. 화면 `public/index.html`에는 Supabase 주소·publishable 키·SDK가 없고, 같은 사이트의 `/api/session`과 `/api/notes`만 부릅니다.
+
+| 경로 | 요청 | 응답 |
+| --- | --- | --- |
+| `POST /api/session` | `{email, password}` (다른 칸은 `400 INVALID_LOGIN`) | `{accessToken, expiresAt, email}`, 실패하면 `401 {error}`(예: `invalid_credentials`), 시도 과다는 `429` |
+| `DELETE /api/session` | `Authorization: Bearer <토큰>` | `204`, 토큰이 없거나 검사에 실패하면 `401 LOGIN_REQUIRED` |
+
+- 서버는 2단계의 Vercel 환경변수 `SUPABASE_URL`·`SUPABASE_SECRET_KEY`로 Supabase Auth에 로그인합니다. 브라우저에는 로그인 토큰과 만료 시각만 주고 refresh token은 주지 않습니다. 화면은 토큰을 그 탭의 `sessionStorage`에만 둡니다.
+- `/api/notes`의 로그인·소유자 검사와 DB 권한은 바뀌지 않았습니다. `aleph.config.json`의 `allowedRoutes`에 `POST /api/session`, `DELETE /api/session`을 더했습니다.
+- 다시 실행: anon 키 직접 점검은 화면에서 키를 읽을 수 없으므로 터미널 환경변수 `ALEPH_CHECK_ANON_KEY`(Supabase 대시보드 > Project Settings > API Keys의 publishable 키)를 줄 때만 보냅니다. 예: `ALEPH_CHECK_ANON_KEY=<publishable 키> npm run bundle`. 없으면 미실행으로 남깁니다.
+- 바뀐 점과 남은 약점: 토큰을 자동으로 갱신하지 않아 약 1시간 뒤에는 다시 로그인합니다. 모든 로그인 요청이 Vercel 서버에서 나가므로 Supabase Auth의 로그인 시도 제한이 사용자별이 아니라 서버 주소 단위로 걸립니다.
+- 되돌리기: 로그인이 깨지면 이 커밋만 `git revert`하면 화면이 Supabase SDK로 로그인하던 5단계 저장점으로 돌아갑니다.
+
 ## 4단계 저장점: 로그인해도 내 자료만
 
 - 작동: `/api/notes`의 다섯 경로 모두 토큰에서 확인한 사용자 ID와 DB의 `owner_id`가 같은 행만 다룹니다. 목록·한 건 읽기·수정·삭제는 `owner_id = 로그인 사용자` 조건을 붙이고, 추가는 확인된 ID를 `owner_id`로 저장합니다.

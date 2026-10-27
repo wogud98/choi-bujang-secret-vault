@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
 function appUrl(config) {
@@ -75,15 +73,12 @@ const probeResult = (probe, label) => (!probe.ran ? NOT_RUN
 
 // 4단계: 공개용 publishable(anon) 키로 Supabase Data API의 notes 테이블을 직접 읽어 봅니다.
 // 5단계부터는 aleph.config.json의 originalApiUrl(쿼리 없는 원본 자료 경로)로 같은 요청을 보냅니다.
-// 키는 화면 코드에 이미 공개된 값을 public/index.html에서 읽고, 결과에는 적지 않습니다.
+// 5단계 가점부터 화면 코드에는 공개 키가 없으므로, 학생이 터미널 환경변수 ALEPH_CHECK_ANON_KEY에
+// Supabase의 publishable(anon) 키를 줄 때만 보냅니다. 키는 요청 헤더에만 쓰고 결과에는 적지 않습니다.
 // authenticated 역할의 직접 접근은 심판이 재현할 수 없어 점검하지 않습니다.
 function publishableKey() {
-  try {
-    const page = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
-    return /\bsb_publishable_[A-Za-z0-9_-]{8,}/u.exec(page)?.[0] ?? null;
-  } catch {
-    return null;
-  }
+  const key = process.env.ALEPH_CHECK_ANON_KEY?.trim();
+  return key && /^(?:sb_publishable_[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/u.test(key) ? key : null;
 }
 async function anonDataApi(config) {
   const key = publishableKey();
@@ -93,7 +88,8 @@ async function anonDataApi(config) {
       : new URL('/rest/v1/notes', new URL(config.identityProvider?.issuer).origin);
     target.search = 'select=note_id&limit=1';
   } catch { target = null; }
-  if (!key || !target) return { ran: false };
+  if (!key) return { ran: false, reason: 'no_key' };
+  if (!target) return { ran: false };
   let response;
   try {
     response = await fetch(target, {
@@ -160,7 +156,9 @@ export async function runAttackChecks(config) {
       { attackId: 'forged_token_notes_list', expected: '서명이 맞지 않는 토큰의 GET /api/notes는 401로 거부됨',
         observed: probeResult(forged, '위조 토큰 GET /api/notes') },
       { attackId: 'anon_key_direct_data_api', expected: 'anon 키로 Data API의 notes를 직접 읽으면 권한 오류로 거부되고 행이 없음',
-        observed: !direct.ran ? '미실행: 이 환경에서 Supabase Data API로 요청이 닿지 않음'
+        observed: !direct.ran ? (direct.reason === 'no_key'
+          ? '미실행: ALEPH_CHECK_ANON_KEY 환경변수가 없어 anon 키 직접 요청을 보내지 않음'
+          : '미실행: 이 환경에서 Supabase Data API로 요청이 닿지 않음')
           : `anon 키 직접 GET /rest/v1/notes 결과 HTTP ${direct.status}, ${direct.rows ? `${direct.rows}행 보임` : '행 없음'}` },
       { attackId: 'cross_user_note_read', expected: 'B 토큰으로 A 메모 ID를 GET하면 404로 거부되고 메모가 없음',
         observed: !readA.ran ? (cross ? NOT_RUN : CROSS_NOT_RUN)

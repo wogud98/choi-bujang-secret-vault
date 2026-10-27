@@ -34,10 +34,10 @@
 </head>
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 3단계 진짜 로그인</div>
+    <div class="eyebrow">BYTE BACK · 5단계 서버 한곳</div>
     <h1>점령된 자료실</h1>
     <p>메모는 서버 API가 학습용 DB에서 읽어 옵니다. 아래 기록은 모두 실습을 위해 만든 가상 자료입니다.</p>
-    <div class="notice">서버 API는 로그인 토큰을 확인한 요청에만 자료를 줍니다. 아직 메모 주인 확인은 없어서, 메모 ID를 알면 다른 계정도 읽고 고칠 수 있습니다. 4단계에서 막습니다.</div>
+    <div class="notice">로그인과 메모 읽기·추가·수정·삭제는 모두 이 사이트의 서버 함수만 거칩니다. 서버는 로그인 토큰과 메모 주인을 확인한 요청만 처리합니다.</div>
     <section class="auth" aria-labelledby="auth-title">
       <p class="status" id="auth-title">로그인 상태를 확인하는 중입니다.</p>
       <form id="login-form" hidden>
@@ -60,12 +60,9 @@
     <ul id="notes" aria-live="polite"><li>가상 자료를 불러오는 중입니다.</li></ul>
   </main>
   <script type="module">
-    // 3단계: Supabase Auth 공식 SDK로 이메일·비밀번호 로그인과 로그아웃을 합니다.
-    // Project URL과 publishable key는 브라우저에 공개해도 되는 값입니다. 서버 전용 키는 여기에 넣지 않습니다.
-    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm';
-    const SUPABASE_URL = 'https://xuhijkycxqipwblhimoh.supabase.co';
-    const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_Dmm_rVd9IU_tN472v9dP0A_bh44IKvg';
-
+    // 5단계: 로그인·로그아웃도 서버 함수 /api/session이 맡습니다. 화면 코드에는 Supabase 주소·공개 키·SDK가 없습니다.
+    // 서버가 돌려준 로그인 토큰은 이 탭의 sessionStorage에만 두고, 만료되면 다시 로그인합니다.
+    const SESSION_KEY = 'vault-session';
     const authTitle = document.querySelector('#auth-title');
     const loginForm = document.querySelector('#login-form');
     const logoutButton = document.querySelector('#logout-button');
@@ -85,47 +82,74 @@
       authError.textContent = message;
       authError.hidden = !message;
     }
+    function saveSession(session) {
+      try {
+        if (session) sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+        else sessionStorage.removeItem(SESSION_KEY);
+      } catch {
+        // 저장소를 쓸 수 없으면 이 화면에서만 로그인 상태를 유지합니다.
+      }
+    }
+    function storedSession() {
+      try {
+        const session = JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? 'null');
+        if (typeof session?.access_token === 'string' && session.expires_at > Date.now() / 1000) return session;
+      } catch {
+        // 깨진 값은 로그인하지 않은 것으로 봅니다.
+      }
+      saveSession(null);
+      return null;
+    }
     function render(session) {
-      const user = session?.user;
-      authTitle.textContent = user ? `로그인됨: ${user.email}` : '로그인하지 않았습니다.';
-      loginForm.hidden = Boolean(user);
-      logoutButton.hidden = !user;
+      authTitle.textContent = session ? `로그인됨: ${session.email ?? ''}` : '로그인하지 않았습니다.';
+      loginForm.hidden = Boolean(session);
+      logoutButton.hidden = !session;
       supabaseSession = session ?? null;
       loadNotes(supabaseSession);
     }
-    if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-      authTitle.textContent = '로그인 설정이 아직 없습니다.';
-      showNotes([], '로그인하면 가상 자료가 보입니다.');
-    } else {
-      const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-      supabase.auth.onAuthStateChange((_event, session) => render(session));
-      loginForm.addEventListener('submit', async event => {
-        event.preventDefault();
-        showError('');
-        const button = loginForm.querySelector('button');
-        button.disabled = true;
-        try {
-          const { error } = await supabase.auth.signInWithPassword({
+    loginForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      showError('');
+      const button = loginForm.querySelector('button');
+      button.disabled = true;
+      try {
+        const response = await fetch('/api/session', {
+          method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
             email: loginForm.querySelector('#login-email').value.trim(),
             password: loginForm.querySelector('#login-password').value,
-          });
-          if (error) {
-            showError(`로그인 실패: ${LOGIN_ERRORS[error.code] ?? error.message}`);
-          } else {
-            loginForm.reset();
-          }
-        } catch {
-          showError('로그인 실패: 로그인 서버에 연결할 수 없습니다.');
-        } finally {
-          button.disabled = false;
+          }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || typeof data.accessToken !== 'string') {
+          showError(`로그인 실패: ${LOGIN_ERRORS[data.error] ?? '로그인할 수 없습니다.'}`);
+          return;
         }
-      });
-      logoutButton.addEventListener('click', async () => {
-        showError('');
-        const { error } = await supabase.auth.signOut();
-        if (error) showError(`로그아웃 실패: ${error.message}`);
-      });
-    }
+        const session = { access_token: data.accessToken, expires_at: data.expiresAt, email: data.email };
+        saveSession(session);
+        loginForm.reset();
+        render(session);
+      } catch {
+        showError('로그인 실패: 로그인 서버에 연결할 수 없습니다.');
+      } finally {
+        button.disabled = false;
+      }
+    });
+    logoutButton.addEventListener('click', async () => {
+      showError('');
+      const token = supabaseSession?.access_token;
+      saveSession(null);
+      render(null);
+      if (!token) return;
+      try {
+        const response = await fetch('/api/session', { method: 'DELETE', cache: 'no-store',
+          headers: { Authorization: `Bearer ${token}` } });
+        if (!response.ok && response.status !== 401) showError('로그아웃 실패: 서버에서 세션을 끊지 못했습니다.');
+      } catch {
+        showError('로그아웃 실패: 로그인 서버에 연결할 수 없습니다.');
+      }
+    });
+    render(storedSession());
 
     // 3단계: 메모는 로그인한 사람만 다룹니다. 로그인 세션의 access token을 Authorization 헤더로 보내고,
     // 서버가 그 토큰을 직접 검사합니다. 화면은 사용자 번호·역할·owner_id를 따로 보내지 않습니다.
@@ -139,7 +163,10 @@
         cache: 'no-store',
         headers: { ...options.headers, Authorization: `Bearer ${token}` },
       });
-      if (response.status === 401) throw new Error('로그인 확인에 실패했습니다. 다시 로그인하세요.');
+      if (response.status === 401) {
+        saveSession(null);
+        throw new Error('로그인 확인에 실패했습니다. 다시 로그인하세요.');
+      }
       if (response.status === 404) throw new Error('메모를 찾을 수 없습니다.');
       if (response.status === 400) throw new Error('제목과 내용을 모두 적어 주세요.');
       if (!response.ok) throw new Error('서버 API에서 자료를 처리할 수 없습니다.');
