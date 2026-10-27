@@ -24,6 +24,39 @@
 
 `src/decider.mjs`와 `src/detect.mjs`의 로컬 시험은 반 엔진이나 운영 심판의 결과가 아닙니다. 1단계 이후 제출 묶음 계약 `aleph.defense.submission.v2`는 `scripts/bundle.mjs`에 남아 있으며, 코딩 도구가 해당 단계의 최신 배포 주소와 Git 원격을 맞춘 뒤 사용합니다.
 
+## 3단계 저장점: 지금 작동하는 것과 다시 실행하는 법
+
+- 작동: 화면 `/`에서 Supabase Auth 이메일·비밀번호로 로그인·로그아웃합니다(공식 SDK `@supabase/supabase-js` 2.117.2, `signInWithPassword`·`signOut`). 실패하면 이유를 화면에 보여 줍니다.
+- 작동: `/api/notes`는 요청의 `Authorization: Bearer` 토큰을 시작 틀의 `src/verify-login.mjs`로 검사합니다. 토큰이 없거나 검사에 실패하면 자료 없이 `401 LOGIN_REQUIRED`를 돌려줍니다. 사용자 ID는 브라우저가 보낸 값이 아니라 검사를 통과한 토큰에서만 얻습니다.
+- 작동: 로그인한 사람은 가상 메모를 추가·수정·삭제합니다. 추가할 때 서버가 확인한 사용자 ID를 `owner_id`로 저장합니다.
+
+| 경로 | 요청 | 응답 |
+| --- | --- | --- |
+| `GET /api/notes` | 없음 | 로그인 사용자(`owner_id`)의 메모 배열 `[{id,title,body}]` |
+| `POST /api/notes` | `{id?, title, body}` (`id`는 UUID, 없으면 서버가 만듦) | `201 {id}`, 같은 `id`가 있으면 `409` |
+| `GET /api/notes/:id` | 없음 | `{id,title,body}`, 없으면 `404` |
+| `PUT /api/notes/:id` | `{title, body}` | `{id,title,body}`, 없으면 `404` |
+| `DELETE /api/notes/:id` | 없음 | `{id}`, 지운 뒤 GET은 `404` |
+
+- `/api/notes/:id`는 `vercel.json`의 rewrite가 같은 함수 `api/notes.js`로 넘깁니다.
+- 설정: 화면 코드에는 공개용 Project URL과 publishable key만 있습니다. 서버는 2단계의 Vercel 환경변수 `SUPABASE_URL`·`SUPABASE_SECRET_KEY`를 그대로 씁니다. 두 값은 같은 Supabase 프로젝트여야 합니다.
+- DB 준비(Supabase SQL Editor에서 한 번): 메모마다 공개용 UUID 칸을 만듭니다.
+
+```sql
+alter table public.notes add column if not exists note_id uuid not null default gen_random_uuid();
+create unique index if not exists notes_note_id_key on public.notes (note_id);
+```
+
+- `aleph.config.json`: `step` 3, `identityProvider`(발급자 `…/auth/v1`, 대상 `authenticated`, 공개키 주소 `…/auth/v1/.well-known/jwks.json`), `allowedRoutes`에 위 다섯 경로. `judgeIssuer`는 바꾸지 않았습니다.
+- 다시 실행: `npm run bundle`(제출 묶음, `bundle-notes.json` 필요). 직접 점검은 토큰 없는 GET·POST·GET `/:id`와 서명이 맞지 않는 토큰으로 자료 API를 불러 `401`과 자료 없음을 기록합니다. 배포 주소에 닿지 않으면 미실행으로 남깁니다.
+- `src/decider.mjs`의 `RULE_IDS`는 시작 틀의 `starter.deny`뿐입니다(정책 규칙은 6단계부터).
+
+### 3단계 남은 약점
+
+- **소유자 검사 없음:** 한 건 읽기·수정·삭제(`/api/notes/:id`)는 로그인만 확인하고 메모 주인은 확인하지 않습니다. B 계정이 A 메모의 ID를 알면 읽고 고치고 지울 수 있습니다. 4단계에서 막습니다.
+- 2단계 이전에 옮긴 가상 메모 네 건은 `owner_id`가 비어 있어서 아무의 목록에도 나오지 않습니다.
+- 옛 공개 커밋 `61842c0`과 1단계 배포의 메모 노출은 그대로입니다.
+
 ## 2단계 저장점: 지금 작동하는 것과 다시 실행하는 법
 
 - 작동: 화면 `/`가 서버 함수 `/api/notes`로 학습용 Supabase `notes` 테이블의 가상 메모 네 건을 읽어 카드로 보여 줍니다. `/data.json`은 없고, `/aleph.json`은 배포마다 `step` 2와 커밋을 기록합니다.
