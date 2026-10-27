@@ -7,7 +7,9 @@ import { createLoginVerifier } from '../src/verify-login.mjs';
 // 3단계: 요청의 Authorization 토큰을 시작 틀의 src/verify-login.mjs로 검사한 뒤에만 자료를 다룹니다.
 // 사용자 번호·역할은 브라우저가 보낸 값을 쓰지 않고, 검사를 통과한 토큰에서만 얻습니다.
 // 경로: GET·POST /api/notes, GET·PUT·DELETE /api/notes/:id (vercel.json이 :id를 ?id=로 넘김).
-// 남은 약점: 한 건 읽기·수정·삭제는 아직 소유자를 확인하지 않습니다. 4단계에서 막습니다.
+// 4단계: 읽기·추가·수정·삭제 모두 토큰에서 확인한 사용자 ID와 DB의 owner_id가 같은 행만 다룹니다.
+// URL·본문의 owner_id는 믿지 않고, 본문에 정해진 칸 외의 값이 있으면 기본 거부합니다.
+// 남의 메모는 있는지 없는지도 알리지 않도록 없는 메모와 같은 404로 답합니다.
 let verifyLogin;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
@@ -21,6 +23,11 @@ function readJson(request) {
     try { return JSON.parse(request.body); } catch { return null; }
   }
   return request.body && typeof request.body === 'object' ? request.body : null;
+}
+
+// POST는 {id?, title, body}, PUT은 {title, body}만 받습니다. owner_id 같은 다른 칸은 거부합니다.
+function onlyFields(input, fields) {
+  return Object.keys(input).every(key => fields.includes(key));
 }
 
 function validText(value, max) {
@@ -76,7 +83,9 @@ export default async function handler(request, response) {
   let input = null;
   if (request.method === 'POST' || request.method === 'PUT') {
     input = readJson(request);
-    if (!input || !validText(input.title, MAX_TITLE) || !validText(input.body, MAX_BODY)
+    const fields = request.method === 'POST' ? ['id', 'title', 'body'] : ['title', 'body'];
+    if (!input || Array.isArray(input) || !onlyFields(input, fields)
+        || !validText(input.title, MAX_TITLE) || !validText(input.body, MAX_BODY)
         || (request.method === 'POST' && input.id !== undefined
           && (typeof input.id !== 'string' || !UUID.test(input.id)))) {
       response.status(400).json({ error: 'INVALID_NOTE' });
@@ -91,15 +100,18 @@ export default async function handler(request, response) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
     const notes = () => supabase.from('notes');
+    const userId = login.userId;
+    // 한 건 요청은 메모 ID와 소유자 ID가 모두 맞는 행만 고릅니다. 남의 메모는 0행이 되어 404입니다.
+    const own = query => query.eq('note_id', id.toLowerCase()).eq('owner_id', userId);
     if (request.method === 'GET' && !id) {
       // 목록은 서버가 확인한 로그인 사용자의 메모만 돌려줍니다.
       const { data, error } = await notes().select('note_id, title, content')
-        .eq('owner_id', login.userId).order('id', { ascending: true });
+        .eq('owner_id', userId).order('id', { ascending: true });
       if (error || !Array.isArray(data)) throw new Error('read');
       result = data.map(toNote);
     } else if (request.method === 'POST') {
       // owner_id는 요청 본문이 아니라 검사를 통과한 토큰의 사용자 ID로 저장합니다.
-      const row = { owner_id: login.userId, title: input.title, content: input.body };
+      const row = { owner_id: userId, title: input.title, content: input.body };
       if (input.id !== undefined) row.note_id = input.id.toLowerCase();
       const { data, error } = await notes().insert(row).select('note_id').single();
       if (error?.code === '23505') {
@@ -111,18 +123,18 @@ export default async function handler(request, response) {
         result = { id: data.note_id };
       }
     } else if (request.method === 'GET') {
-      const { data, error } = await notes().select('note_id, title, content')
-        .eq('note_id', id.toLowerCase()).maybeSingle();
+      const { data, error } = await own(notes().select('note_id, title, content')).maybeSingle();
       if (error) throw new Error('read');
       if (data) result = toNote(data);
     } else if (request.method === 'PUT') {
-      const { data, error } = await notes().update({ title: input.title, content: input.body })
-        .eq('note_id', id.toLowerCase()).select('note_id, title, content').maybeSingle();
+      // 기존 행: owner_id가 본인인 행만 고릅니다. 새 행: owner_id는 바꾸지 않고, 돌아온 행의 주인도 다시 확인합니다.
+      const { data, error } = await own(notes().update({ title: input.title, content: input.body }))
+        .select('note_id, owner_id, title, content').maybeSingle();
       if (error) throw new Error('update');
+      if (data && data.owner_id !== userId) throw new Error('owner');
       if (data) result = toNote(data);
     } else {
-      const { data, error } = await notes().delete()
-        .eq('note_id', id.toLowerCase()).select('note_id').maybeSingle();
+      const { data, error } = await own(notes().delete()).select('note_id').maybeSingle();
       if (error) throw new Error('delete');
       if (data) result = { id: data.note_id };
     }
