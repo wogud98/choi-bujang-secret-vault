@@ -16,11 +16,24 @@ export default async function handler(request, response) {
     response.status(500).json({ error: 'NOTES_API_NOT_CONFIGURED' });
     return;
   }
-  const supabase = createClient(url, secretKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { data, error } = await supabase.from('notes')
-    .select('title, content, sample_marker').order('id', { ascending: true });
+  let projectUrl;
+  try { projectUrl = new URL(url); } catch { projectUrl = null; }
+  if (!projectUrl || projectUrl.protocol !== 'https:' || projectUrl.pathname !== '/'
+      || !projectUrl.hostname.endsWith('.supabase.co')) {
+    response.status(500).json({ error: 'NOTES_API_BAD_SUPABASE_URL' });
+    return;
+  }
+  let data;
+  let error;
+  try {
+    const supabase = createClient(projectUrl.origin, secretKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    ({ data, error } = await supabase.from('notes')
+      .select('title, content, sample_marker').order('id', { ascending: true }));
+  } catch {
+    error = true;
+  }
   if (error || !Array.isArray(data)) {
     console.error('notes_read_failed');
     response.status(502).json({ error: 'NOTES_READ_FAILED' });
