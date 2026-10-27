@@ -24,6 +24,14 @@
 
 `src/decider.mjs`와 `src/detect.mjs`의 로컬 시험은 반 엔진이나 운영 심판의 결과가 아닙니다. 1단계 이후 제출 묶음 계약 `aleph.defense.submission.v2`는 `scripts/bundle.mjs`에 남아 있으며, 코딩 도구가 해당 단계의 최신 배포 주소와 Git 원격을 맞춘 뒤 사용합니다.
 
+## 2단계 저장점: 지금 작동하는 것과 다시 실행하는 법
+
+- 작동: 화면 `/`가 서버 함수 `/api/notes`로 학습용 Supabase `notes` 테이블의 가상 메모 네 건을 읽어 카드로 보여 줍니다. `/data.json`은 없고, `/aleph.json`은 배포마다 `step` 2와 커밋을 기록합니다.
+- 설정: Vercel 환경변수 `SUPABASE_URL`(`https://<프로젝트>.supabase.co`)과 서버 전용 `SUPABASE_SECRET_KEY`. Supabase SQL Editor에서 메모 이전 SQL을 먼저 실행합니다(SQL은 저장소 밖에 보관).
+- `aleph.config.json`: `step` 2, `repoUrl`·`publicAppUrl`은 실제 저장소와 고정 배포 주소. 로그인 발급자·허용 경로·원본 API 주소는 아직 없음(3·5단계).
+- 다시 실행: `npm run build -- --local`(빌드 흐름), `npm run bundle`(제출 묶음, `bundle-notes.json` 필요). 직접 점검은 `/data.json`과 `/api/notes`를 비로그인으로 요청하고, 배포 주소에 닿지 않으면 미실행으로 남깁니다.
+- `src/decider.mjs`의 `RULE_IDS`는 시작 틀의 `starter.deny`뿐입니다(정책 규칙은 6단계부터).
+
 ## 2단계 기록: 자료를 코드 밖으로
 
 - 가상 메모 네 건은 학습용 Supabase `public.notes` 테이블로 옮겼습니다(RLS 켬, `anon`·`authenticated` 권한 없음, `owner_id uuid` 칸만 미리 둠). 옮길 때 쓴 SQL은 메모 문장이 들어 있어 저장소에 커밋하지 않았습니다.
