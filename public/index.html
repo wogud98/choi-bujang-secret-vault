@@ -31,8 +31,8 @@
   <main>
     <div class="eyebrow">BYTE BACK · 3단계 진짜 로그인</div>
     <h1>점령된 자료실</h1>
-    <p>메모는 이제 정적 파일이 아니라 서버 API가 학습용 DB에서 읽어 옵니다. 아래 기록은 모두 실습을 위해 만든 가상 자료입니다.</p>
-    <div class="notice">아직 로그인 확인이 없어 누구나 서버 API를 부를 수 있습니다. 3단계에서 접근을 막습니다.</div>
+    <p>메모는 서버 API가 학습용 DB에서 읽어 옵니다. 아래 기록은 모두 실습을 위해 만든 가상 자료입니다.</p>
+    <div class="notice">서버 API는 로그인 토큰을 확인한 요청에만 자료를 줍니다. 다른 사람 자료를 가리는 일은 4단계에서 합니다.</div>
     <section class="auth" aria-labelledby="auth-title">
       <p class="status" id="auth-title">로그인 상태를 확인하는 중입니다.</p>
       <form id="login-form" hidden>
@@ -56,6 +56,8 @@
     const loginForm = document.querySelector('#login-form');
     const logoutButton = document.querySelector('#logout-button');
     const authError = document.querySelector('#auth-error');
+    const list = document.querySelector('#notes');
+    let supabaseSession = null;
     const LOGIN_ERRORS = {
       invalid_credentials: '이메일 또는 비밀번호가 맞지 않습니다.',
       email_not_confirmed: '이메일 인증이 아직 끝나지 않았습니다. 받은 메일의 확인 링크를 먼저 누르세요.',
@@ -71,9 +73,12 @@
       authTitle.textContent = user ? `로그인됨: ${user.email}` : '로그인하지 않았습니다.';
       loginForm.hidden = Boolean(user);
       logoutButton.hidden = !user;
+      supabaseSession = session ?? null;
+      loadNotes(supabaseSession);
     }
     if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
       authTitle.textContent = '로그인 설정이 아직 없습니다.';
+      showNotes([], '로그인하면 가상 자료가 보입니다.');
     } else {
       const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
       supabase.auth.onAuthStateChange((_event, session) => render(session));
@@ -105,13 +110,37 @@
       });
     }
 
-    const list = document.querySelector('#notes');
-    try {
-      const response = await fetch('/api/notes', { cache: 'no-store' });
-      if (!response.ok) throw new Error('서버 API에서 자료를 읽을 수 없습니다.');
-      const data = await response.json();
-      if (!Array.isArray(data.notes)) throw new Error('자료 형식이 맞지 않습니다.');
-      list.replaceChildren(...data.notes.map(note => {
+    // 3단계: 메모는 로그인한 사람만 받습니다. 로그인 세션의 access token을 Authorization 헤더로 보내고,
+    // 서버가 그 토큰을 직접 검사합니다. 화면은 사용자 번호나 역할을 따로 보내지 않습니다.
+    async function loadNotes(session) {
+      const token = session?.access_token;
+      if (!token) {
+        showNotes([], '로그인하면 가상 자료가 보입니다.');
+        return;
+      }
+      try {
+        const response = await fetch('/api/notes', {
+          cache: 'no-store',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.status === 401) throw new Error('로그인 확인에 실패해 자료를 받을 수 없습니다. 다시 로그인하세요.');
+        if (!response.ok) throw new Error('서버 API에서 자료를 읽을 수 없습니다.');
+        const data = await response.json();
+        if (!Array.isArray(data.notes)) throw new Error('자료 형식이 맞지 않습니다.');
+        if (supabaseSession?.access_token !== token) return;
+        showNotes(data.notes);
+      } catch (error) {
+        showNotes([], error.message);
+      }
+    }
+    function showNotes(notes, message) {
+      if (message) {
+        const item = document.createElement('li');
+        item.textContent = message;
+        list.replaceChildren(item);
+        return;
+      }
+      list.replaceChildren(...notes.map(note => {
         const item = document.createElement('li');
         const title = document.createElement('strong');
         const content = document.createElement('span');
@@ -120,10 +149,6 @@
         item.append(title, content);
         return item;
       }));
-    } catch (error) {
-      const item = document.createElement('li');
-      item.textContent = error.message;
-      list.replaceChildren(item);
     }
   </script>
 </body>
