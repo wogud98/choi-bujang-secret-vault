@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
 function appUrl(config) {
@@ -71,7 +73,97 @@ async function apiProbe(app, method, path, authorization) {
 const probeResult = (probe, label) => (!probe.ran ? NOT_RUN
   : `${label} 요청 결과 HTTP ${probe.status}, ${probe.leaked ? '자료 또는 메모 ID가 응답에 포함됨' : '자료 없음'}`);
 
+// 4단계: 공개용 publishable(anon) 키로 Supabase Data API의 notes 테이블을 직접 읽어 봅니다.
+// 키는 화면 코드에 이미 공개된 값을 public/index.html에서 읽고, 결과에는 적지 않습니다.
+// authenticated 역할의 직접 접근은 심판이 재현할 수 없어 점검하지 않습니다.
+function publishableKey() {
+  try {
+    const page = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+    return /\bsb_publishable_[A-Za-z0-9_-]{8,}/u.exec(page)?.[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+async function anonDataApi(config) {
+  const key = publishableKey();
+  let origin;
+  try { origin = new URL(config.identityProvider?.issuer).origin; } catch { origin = null; }
+  if (!key || !origin) return { ran: false };
+  let response;
+  try {
+    response = await fetch(new URL('/rest/v1/notes?select=note_id&limit=1', origin), {
+      redirect: 'error', signal: AbortSignal.timeout(10000),
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+    });
+  } catch {
+    return { ran: false };
+  }
+  let rows = null;
+  try {
+    const data = await response.json();
+    if (Array.isArray(data)) rows = data.length;
+  } catch {
+    // A non-JSON response carries no rows.
+  }
+  return { ran: true, status: response.status, rows };
+}
+
+// 4단계 교차 사용자 점검(선택): 학생이 터미널 환경변수로 B의 로그인 토큰과 A의 메모 ID를 줄 때만 실행합니다.
+// 토큰은 요청 헤더에만 쓰고 결과·로그에 남기지 않습니다. 남의 메모를 바꿀 수 있는 DELETE는 보내지 않고,
+// PUT은 owner_id를 끼워 넣은 본문으로 보내 서버가 DB에 닿기 전에 거부하는지만 봅니다.
+async function crossUserProbe(app, method, path, token, body) {
+  let response;
+  try {
+    response = await fetch(new URL(path, app), {
+      method, redirect: 'error', signal: AbortSignal.timeout(10000),
+      headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    return { ran: false };
+  }
+  let leaked = false;
+  try {
+    const data = await response.json();
+    leaked = typeof data?.id === 'string' || typeof data?.body === 'string';
+  } catch {
+    // A non-JSON response carries no note.
+  }
+  return { ran: true, status: response.status, leaked };
+}
+const CROSS_NOT_RUN = '미실행: ALEPH_CHECK_TOKEN_B·ALEPH_CHECK_NOTE_A 환경변수가 없어 교차 사용자 요청을 보내지 않음';
+
 export async function runAttackChecks(config) {
+  if (config.step === 4) {
+    const app = appUrl(config);
+    const list = await apiProbe(app, 'GET', '/api/notes');
+    const one = await apiProbe(app, 'GET', `/api/notes/${PROBE_ID}`);
+    const forged = await apiProbe(app, 'GET', '/api/notes', `Bearer ${forgedToken(config)}`);
+    const direct = await anonDataApi(config);
+    const tokenB = process.env.ALEPH_CHECK_TOKEN_B;
+    const noteA = process.env.ALEPH_CHECK_NOTE_A;
+    const cross = tokenB && /^[0-9a-f-]{36}$/iu.test(noteA ?? '');
+    const readA = cross ? await crossUserProbe(app, 'GET', `/api/notes/${noteA}`, tokenB) : { ran: false };
+    const takeA = cross ? await crossUserProbe(app, 'PUT', `/api/notes/${noteA}`, tokenB,
+      { title: '점검', body: '소유자 변경 시도', owner_id: PROBE_ID }) : { ran: false };
+    return [
+      { attackId: 'anonymous_notes_list', expected: '토큰 없는 GET /api/notes는 401로 거부되고 자료가 없음',
+        observed: probeResult(list, '토큰 없는 GET /api/notes') },
+      { attackId: 'anonymous_note_read_by_id', expected: '토큰 없는 GET /api/notes/:id는 401로 거부됨',
+        observed: probeResult(one, '토큰 없는 GET /api/notes/:id') },
+      { attackId: 'forged_token_notes_list', expected: '서명이 맞지 않는 토큰의 GET /api/notes는 401로 거부됨',
+        observed: probeResult(forged, '위조 토큰 GET /api/notes') },
+      { attackId: 'anon_key_direct_data_api', expected: 'anon 키로 Data API의 notes를 직접 읽으면 권한 오류로 거부되고 행이 없음',
+        observed: !direct.ran ? '미실행: 이 환경에서 Supabase Data API로 요청이 닿지 않음'
+          : `anon 키 직접 GET /rest/v1/notes 결과 HTTP ${direct.status}, ${direct.rows ? `${direct.rows}행 보임` : '행 없음'}` },
+      { attackId: 'cross_user_note_read', expected: 'B 토큰으로 A 메모 ID를 GET하면 404로 거부되고 메모가 없음',
+        observed: !readA.ran ? (cross ? NOT_RUN : CROSS_NOT_RUN)
+          : `B 토큰 GET /api/notes/<A 메모> 결과 HTTP ${readA.status}, ${readA.leaked ? 'A 메모가 응답에 포함됨' : '자료 없음'}` },
+      { attackId: 'cross_user_owner_change', expected: 'owner_id를 넣은 PUT은 400으로 거부되고 메모가 바뀌지 않음',
+        observed: !takeA.ran ? (cross ? NOT_RUN : CROSS_NOT_RUN)
+          : `B 토큰 PUT /api/notes/<A 메모>(owner_id 포함) 결과 HTTP ${takeA.status}, ${takeA.leaked ? '메모가 응답에 포함됨' : '자료 없음'}` },
+    ];
+  }
   if (config.step === 3) {
     const app = appUrl(config);
     const list = await apiProbe(app, 'GET', '/api/notes');

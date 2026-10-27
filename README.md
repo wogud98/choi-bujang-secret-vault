@@ -24,6 +24,18 @@
 
 `src/decider.mjs`와 `src/detect.mjs`의 로컬 시험은 반 엔진이나 운영 심판의 결과가 아닙니다. 1단계 이후 제출 묶음 계약 `aleph.defense.submission.v2`는 `scripts/bundle.mjs`에 남아 있으며, 코딩 도구가 해당 단계의 최신 배포 주소와 Git 원격을 맞춘 뒤 사용합니다.
 
+## 4단계 저장점: 로그인해도 내 자료만
+
+- 작동: `/api/notes`의 다섯 경로 모두 토큰에서 확인한 사용자 ID와 DB의 `owner_id`가 같은 행만 다룹니다. 목록·한 건 읽기·수정·삭제는 `owner_id = 로그인 사용자` 조건을 붙이고, 추가는 확인된 ID를 `owner_id`로 저장합니다.
+- 기본 거부: URL·본문의 `owner_id`는 믿지 않습니다. 본문은 추가 `{id?, title, body}`, 수정 `{title, body}`만 받고 다른 칸(예: `owner_id`)이 있으면 `400 INVALID_NOTE`입니다. 남의 메모는 없는 메모와 같은 `404 NOTE_NOT_FOUND`로 답해 있는지도 알리지 않습니다.
+- 수정은 기존 행의 주인이 본인인 행만 고르고 `owner_id`는 바꾸지 않으며, 바뀐 행의 주인도 다시 확인합니다. 한 건 응답 `{id,title,body}`, 수정 본문 `{title,body}`는 3단계와 같습니다.
+- DB(두 번째 방어선): `public.notes`에 RLS를 켜고 `PUBLIC`·`anon`·`authenticated` 권한을 모두 회수한 뒤 `authenticated`에만 SELECT·INSERT·UPDATE·DELETE를 줍니다. 정책 네 개가 모두 `auth.uid() = owner_id`일 때만 허용합니다(SELECT·DELETE는 USING, INSERT는 WITH CHECK, UPDATE는 둘 다). 앱 API는 서버 전용 키로 접속하므로 앱의 소유자 검사는 API 코드가 맡습니다.
+- DB 준비 SQL(소유자 연결, RLS·권한)은 계정 이메일이 들어 있어 저장소 밖에 보관했습니다. 정책 이름: `notes_select_own`, `notes_insert_own`, `notes_update_own`, `notes_delete_own`.
+- `aleph.config.json`: `step` 4. `allowedRoutes`는 실제 다섯 경로 `GET /api/notes`, `POST /api/notes`, `GET·PUT·DELETE /api/notes/:id` 그대로입니다. `judgeIssuer`는 바꾸지 않았습니다.
+- 다시 실행: `npm run bundle`(`bundle-notes.json` 필요). 직접 점검은 토큰 없는 요청·위조 토큰·anon 키 Data API 직접 읽기를 보냅니다. 교차 사용자 점검은 터미널에서 `ALEPH_CHECK_TOKEN_B`(B의 로그인 토큰)와 `ALEPH_CHECK_NOTE_A`(A 메모 ID)를 줄 때만 보내고, 토큰은 결과에 남기지 않습니다. 배포 주소나 Supabase에 닿지 않으면 미실행으로 남깁니다.
+- 화면 확인: A로 로그인하면 가상 메모 네 건, B로 로그인하면 B 시험 메모 한 건만 보입니다. B가 A 메모 ID로 읽기·수정·삭제하면 404입니다.
+- 남은 점: `authenticated` 역할로 Data API에 직접 오는 요청은 RLS가 막지만, 심판이 재현할 수 없어 직접 점검에서 뺐습니다. 옛 공개 커밋 `61842c0`과 1단계 배포의 메모 노출은 그대로입니다.
+
 ## 3단계 저장점: 지금 작동하는 것과 다시 실행하는 법
 
 - 작동: 화면 `/`에서 Supabase Auth 이메일·비밀번호로 로그인·로그아웃합니다(공식 SDK `@supabase/supabase-js` 2.117.2, `signInWithPassword`·`signOut`). 실패하면 이유를 화면에 보여 줍니다.
