@@ -74,6 +74,7 @@ const probeResult = (probe, label) => (!probe.ran ? NOT_RUN
   : `${label} 요청 결과 HTTP ${probe.status}, ${probe.leaked ? '자료 또는 메모 ID가 응답에 포함됨' : '자료 없음'}`);
 
 // 4단계: 공개용 publishable(anon) 키로 Supabase Data API의 notes 테이블을 직접 읽어 봅니다.
+// 5단계부터는 aleph.config.json의 originalApiUrl(쿼리 없는 원본 자료 경로)로 같은 요청을 보냅니다.
 // 키는 화면 코드에 이미 공개된 값을 public/index.html에서 읽고, 결과에는 적지 않습니다.
 // authenticated 역할의 직접 접근은 심판이 재현할 수 없어 점검하지 않습니다.
 function publishableKey() {
@@ -86,12 +87,16 @@ function publishableKey() {
 }
 async function anonDataApi(config) {
   const key = publishableKey();
-  let origin;
-  try { origin = new URL(config.identityProvider?.issuer).origin; } catch { origin = null; }
-  if (!key || !origin) return { ran: false };
+  let target;
+  try {
+    target = config.originalApiUrl ? new URL(config.originalApiUrl)
+      : new URL('/rest/v1/notes', new URL(config.identityProvider?.issuer).origin);
+    target.search = 'select=note_id&limit=1';
+  } catch { target = null; }
+  if (!key || !target) return { ran: false };
   let response;
   try {
-    response = await fetch(new URL('/rest/v1/notes?select=note_id&limit=1', origin), {
+    response = await fetch(target, {
       redirect: 'error', signal: AbortSignal.timeout(10000),
       headers: { apikey: key, Authorization: `Bearer ${key}` },
     });
@@ -134,7 +139,8 @@ async function crossUserProbe(app, method, path, token, body) {
 const CROSS_NOT_RUN = '미실행: ALEPH_CHECK_TOKEN_B·ALEPH_CHECK_NOTE_A 환경변수가 없어 교차 사용자 요청을 보내지 않음';
 
 export async function runAttackChecks(config) {
-  if (config.step === 4) {
+  // 5단계는 4단계 점검을 그대로 보내고, anon 키 직접 요청만 originalApiUrl로 보냅니다.
+  if (config.step === 4 || config.step === 5) {
     const app = appUrl(config);
     const list = await apiProbe(app, 'GET', '/api/notes');
     const one = await apiProbe(app, 'GET', `/api/notes/${PROBE_ID}`);

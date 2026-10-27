@@ -24,6 +24,26 @@
 
 `src/decider.mjs`와 `src/detect.mjs`의 로컬 시험은 반 엔진이나 운영 심판의 결과가 아닙니다. 1단계 이후 제출 묶음 계약 `aleph.defense.submission.v2`는 `scripts/bundle.mjs`에 남아 있으며, 코딩 도구가 해당 단계의 최신 배포 주소와 Git 원격을 맞춘 뒤 사용합니다.
 
+## 5단계 저장점: 자료 요청을 서버 한곳으로
+
+- 작동: 브라우저의 메모 읽기·추가·수정·삭제는 모두 Vercel 서버 함수 `/api/notes`만 부릅니다. 화면이 Supabase를 직접 부르는 곳은 로그인·로그아웃(Auth)뿐이고, 메모 테이블을 직접 부르는 코드는 없습니다(제작1 확인 결과 "없음", 화면 코드 변경 없음).
+- 유지: 서버 함수의 로그인 검사(`401 LOGIN_REQUIRED`), 소유자 검사(남의 메모 `404`, 본문의 다른 칸 `400`), 서버 전용 설정(Vercel 환경변수 `SUPABASE_URL`·`SUPABASE_SECRET_KEY`)은 4단계와 같습니다.
+- DB: `public.notes` 한 테이블에서 `PUBLIC`·`anon`·`authenticated`의 직접 권한을 모두 회수했습니다. 서버 함수가 쓰는 `service_role`의 SELECT·INSERT·UPDATE·DELETE와 RLS는 유지합니다. 4단계 정책 네 개는 남아 있지만 권한이 없어 직접 요청에는 쓰이지 않습니다. 이제 로그인한 사람의 토큰으로도 Data API를 직접 부를 수 없습니다.
+
+```sql
+begin;
+revoke all on table public.notes from public, anon, authenticated;
+grant select, insert, update, delete on table public.notes to service_role;
+alter table public.notes enable row level security;
+commit;
+```
+
+- 권한 확인(SQL Editor, 적용 전후): `has_table_privilege('anon'|'authenticated'|'service_role', 'public.notes', 'SELECT'…)`. 적용 후 정상은 `anon`·`authenticated` 모두 false, `service_role`은 네 권한 true입니다.
+- `aleph.config.json`: `step` 5, `originalApiUrl`은 쿼리 없는 원본 자료 경로 `https://xuhijkycxqipwblhimoh.supabase.co/rest/v1/notes`. `allowedRoutes`·`identityProvider`는 4단계 그대로, `judgeIssuer`는 바꾸지 않았습니다.
+- 다시 실행: `npm run bundle`(`bundle-notes.json` 필요). 직접 점검은 4단계와 같고, anon 키 직접 읽기만 `originalApiUrl`로 보냅니다. 정상은 `401` 또는 `403`에 행 없음입니다. 닿지 않으면 미실행으로 남깁니다.
+- 화면 확인: A로 로그인하면 메모 읽기·추가·수정·삭제가 그대로 됩니다.
+- 남은 점: 옛 공개 커밋 `61842c0`과 1단계 배포의 메모 노출은 그대로입니다.
+
 ## 4단계 저장점: 로그인해도 내 자료만
 
 - 작동: `/api/notes`의 다섯 경로 모두 토큰에서 확인한 사용자 ID와 DB의 `owner_id`가 같은 행만 다룹니다. 목록·한 건 읽기·수정·삭제는 `owner_id = 로그인 사용자` 조건을 붙이고, 추가는 확인된 ID를 `owner_id`로 저장합니다.
