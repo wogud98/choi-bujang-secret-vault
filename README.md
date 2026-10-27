@@ -23,3 +23,12 @@
 [AGENTS.md](AGENTS.md)를 먼저 읽히고 한 번에 한 제작 단위만 요청하세요. 2단계부터는 자료 보호를 구현할 때 `public/data.json`을 복사하는 1단계 빌드 흐름도 함께 바꿔야 합니다. 3단계 이후의 로그인, 허용 경로, 5단계의 원본 API 주소, 6단계 이후 정책 규칙은 해당 단계 원고와 계약에 맞춰 추가합니다. 비밀번호·토큰·서버 전용 키·실제 학생 기록을 코드, Git, 제출 묶음에 넣지 않습니다.
 
 `src/decider.mjs`와 `src/detect.mjs`의 로컬 시험은 반 엔진이나 운영 심판의 결과가 아닙니다. 1단계 이후 제출 묶음 계약 `aleph.defense.submission.v2`는 `scripts/bundle.mjs`에 남아 있으며, 코딩 도구가 해당 단계의 최신 배포 주소와 Git 원격을 맞춘 뒤 사용합니다.
+
+## 2단계 기록: 자료를 코드 밖으로
+
+- 가상 메모 네 건은 학습용 Supabase `public.notes` 테이블로 옮겼습니다(RLS 켬, `anon`·`authenticated` 권한 없음, `owner_id uuid` 칸만 미리 둠). 옮길 때 쓴 SQL은 메모 문장이 들어 있어 저장소에 커밋하지 않았습니다.
+- 화면 `/`는 Vercel 서버 함수 `/api/notes`를 통해 메모를 읽습니다. 함수는 Vercel 환경변수 `SUPABASE_URL`과 서버 전용 `SUPABASE_SECRET_KEY`를 씁니다. 키 값은 Vercel 설정 화면의 환경변수 입력란에만 넣고, 코드·Git·로그·응답에 넣지 않습니다.
+- 빌드는 더 이상 `public/data.json`을 만들지 않고, `/aleph.json`만 계속 만듭니다. `aleph.config.json`의 `step`은 2입니다.
+- **남은 약점:** `/api/notes`는 아직 로그인 확인이 없는 공개 주소라서, 누구나 직접 불러 가상 메모를 읽을 수 있습니다. 그래서 3단계 전까지 이 테이블에는 가상 메모만 둡니다.
+- **지워지지 않은 이력:** 1단계 공개 커밋(`61842c0`)과 그때의 Vercel 배포에는 메모가 든 `data.json`이 그대로 남아 있습니다. 최신 파일에서 뺐다고 이전 이력까지 지워지지는 않습니다.
+- 다시 실행: `npm run build -- --local`로 빌드 흐름만 확인할 수 있습니다. 메모 읽기는 환경변수가 설정된 Vercel 배포에서 `/api/notes`로 확인합니다.
