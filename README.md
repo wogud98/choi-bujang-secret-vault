@@ -24,6 +24,13 @@
 
 `src/decider.mjs`와 `src/detect.mjs`의 로컬 시험은 반 엔진이나 운영 심판의 결과가 아닙니다. 1단계 이후 제출 묶음 계약 `aleph.defense.submission.v2`는 `scripts/bundle.mjs`에 남아 있으며, 코딩 도구가 해당 단계의 최신 배포 주소와 Git 원격을 맞춘 뒤 사용합니다.
 
+## 보너스 xdr-02 저장점: 웹 주입 공격 탐지
+
+- 작동: `xdr/web-injection/decide.mjs`가 Wazuh 모양 연습 경보 하나를 받아 `block`·`alert`·`record`와 확신도, 근거 패턴 이름을 돌려줍니다. 패턴은 MITRE ATT&CK T1190(외부 공개 앱 악용)의 반복 주입 네 형태(SQL 구문, 스크립트 태그, 경로 거슬러 올라가기, 명령 구분자)와 반복 없는 한 번짜리 의심 표기(최대 확신도 0.8, 차단하지 않음)이고, `patterns.json`과 파일 맨 위 상수가 같습니다. `decide.mjs`에는 `import`가 없고 파일 읽기·쓰기·네트워크도 없습니다.
+- 알림과 차단: `xdr/web-injection/respond.mjs`가 `alert`·`block`을 공용 `xdr/alerts.log`에 한 줄씩 쌓고(같은 경보는 한 번만), 같은 주소에서 반복된 `block` 주소만 근거 경보 번호와 1시간 만료 시각을 붙여 `xdr/web-injection/deny-rules.json`에 거부 규칙으로 둡니다. 정상 요청이 나온 주소는 규칙에 넣지 않습니다.
+- 판정기 연결: xdr-01과 같이 `src/decider.mjs`는 고치지 않았습니다. 거부 규칙은 운영 엔진이 출발 주소를 계약으로 넘겨줄 때 `isBlocked()` 확인 단계로 꽂습니다.
+- 다시 실행: `npm run xdr:run -- web-injection`(→ `xdr/web-injection/result.json`), `node xdr/web-injection/respond.mjs`(알림·거부 규칙·다시 흘리기 결과), `node xdr/web-injection/read-alerts.mjs`(경보 확인용 목록). 로컬 결과는 연습 경보 기준이며 심판 판정이 아닙니다.
+
 ## 보너스 xdr-01 저장점: 무차별 로그인 공격 탐지
 
 - 작동: `xdr/brute-force/decide.mjs`가 Wazuh 모양 연습 경보 하나를 받아 `block`·`alert`·`record`와 확신도, 근거 패턴 이름을 돌려줍니다. 패턴은 MITRE ATT&CK T1110의 두 형태(같은 주소 실패 연속 T1110.001, 여러 계정 비밀번호 스프레이 T1110.003)이고, `patterns.json`과 파일 맨 위 상수가 같습니다. `decide.mjs`에는 `import`가 없고 파일 읽기·쓰기·네트워크도 없습니다.

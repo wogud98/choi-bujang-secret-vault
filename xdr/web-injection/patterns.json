@@ -1,0 +1,70 @@
+{
+  "schema": "aleph.xdr.patterns.v1",
+  "moduleKey": "web-injection",
+  "source": "MITRE ATT&CK T1190 Exploit Public-Facing Application (https://attack.mitre.org/techniques/T1190/)",
+  "patterns": [
+    {
+      "name": "sql_injection_repeat",
+      "technique": "T1190",
+      "condition": {
+        "mitre": "T1190",
+        "descriptionHas": ["SQL 구문", "SQL 표식", "데이터베이스 조회"],
+        "urlHas": ["doc-sql"],
+        "repeatAtLeast": 3,
+        "clearRepeat": 10,
+        "clearLevel": 12
+      },
+      "evidence": "T1190 외부 공개 앱 악용: 요청 인자에 SQL 구문을 이어 붙여 앱 뒤의 데이터베이스를 조회·조작하려는 형태입니다(MOVEit CVE-2023-34362 같은 SQL 주입)."
+    },
+    {
+      "name": "script_injection_repeat",
+      "technique": "T1190",
+      "condition": {
+        "mitre": "T1190",
+        "descriptionHas": ["스크립트 삽입", "스크립트 표식"],
+        "urlHas": ["doc-script"],
+        "repeatAtLeast": 3,
+        "clearRepeat": 10,
+        "clearLevel": 12
+      },
+      "evidence": "T1190 외부 공개 앱 악용: 요청 인자에 스크립트 태그를 넣어 웹 화면에서 공격자 코드를 실행하게 하려는 형태입니다."
+    },
+    {
+      "name": "path_traversal_repeat",
+      "technique": "T1190",
+      "condition": {
+        "mitre": "T1190",
+        "descriptionHas": ["거슬러 올라가", "경로 이탈"],
+        "urlHas": ["doc-up"],
+        "repeatAtLeast": 3,
+        "clearRepeat": 10,
+        "clearLevel": 12
+      },
+      "evidence": "T1190 외부 공개 앱 악용: 경로 인자에 ../ 를 되풀이해 공개 폴더 밖의 서버 파일을 읽으려는 형태입니다."
+    },
+    {
+      "name": "command_separator_repeat",
+      "technique": "T1190",
+      "condition": {
+        "mitre": "T1190",
+        "descriptionHas": ["명령 구분자"],
+        "urlHas": ["doc-cmd"],
+        "repeatAtLeast": 3,
+        "clearRepeat": 10,
+        "clearLevel": 12
+      },
+      "evidence": "T1190 외부 공개 앱 악용: 요청 인자에 명령 구분자를 넣어 서버가 공격자 명령을 이어 실행하게 하려는 형태입니다."
+    },
+    {
+      "name": "single_injection_marker",
+      "technique": "T1190",
+      "condition": {
+        "mitre": "T1190",
+        "repeatBelow": 3,
+        "clearLevel": 12,
+        "maxConfidence": 0.8
+      },
+      "evidence": "T1190 탐지(웹 앱 요청 로그 확인): 외부 공개 앱 요청에 주입처럼 보이는 표기가 한 번만 나오고 반복이 없으면 오탐일 수 있어 막지 않고 사람 확인으로 넘깁니다."
+    }
+  ]
+}
