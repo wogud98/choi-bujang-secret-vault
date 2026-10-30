@@ -74,9 +74,24 @@ const ALERT_AT = 0.5;
 // 판단 시작 수준. 이 아래 수준은 패턴과 맞는 정도를 0 으로 봅니다.
 const BASE_LEVEL = 5;
 
+/**
+ * 숫자를 0~1 사이로 자릅니다. 숫자가 아니면 0 입니다.
+ * @param {number} n 자를 숫자
+ * @returns {number} 0~1 사이 값
+ */
 const clamp01 = (n) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
+/**
+ * 숫자를 소수 둘째 자리까지 반올림합니다.
+ * @param {number} n 반올림할 숫자
+ * @returns {number} 반올림한 값
+ */
 const round2 = (n) => Math.round(n * 100) / 100;
 
+/**
+ * 경보 하나에서 판단에 쓰는 신호(설명·요청 주소·수준·반복 횟수·MITRE 기법)를 꺼냅니다.
+ * @param {object} alert 판단할 경보 하나
+ * @returns {{description: string, url: string, level: number, repeat: number, hasMitre: (id: string) => boolean}} 꺼낸 신호
+ */
 function readSignals(alert) {
   const description = typeof alert?.rule?.description === 'string' ? alert.rule.description : '';
   const mitre = Array.isArray(alert?.rule?.mitre) ? alert.rule.mitre : [];
@@ -99,9 +114,20 @@ function readSignals(alert) {
   };
 }
 
+/**
+ * 경보 수준을 기준 수준(BASE_LEVEL)과 패턴의 확실 수준(clearLevel) 사이에서 0~1 점수로 바꿉니다.
+ * @param {object} s readSignals 가 꺼낸 신호
+ * @param {object} c 패턴의 조건값(condition)
+ * @returns {number} 0~1 수준 점수
+ */
 const levelScore = (s, c) => clamp01((s.level - BASE_LEVEL) / (c.clearLevel - BASE_LEVEL));
 
-// 반복 주입 패턴의 0~1 확신도입니다. 맞지 않으면 null 입니다.
+/**
+ * 같은 주입(SQL·스크립트·경로 이탈·명령 구분자)을 반복한 패턴과 맞는 정도를 0~1 확신도로 매깁니다.
+ * @param {object} p PATTERNS 의 반복 주입 패턴 하나(조건값 condition 을 씁니다)
+ * @param {object} s readSignals 가 꺼낸 신호
+ * @returns {number|null} 확신도. 패턴과 맞지 않으면 null
+ */
 function scoreRepeat(p, s) {
   const c = p.condition;
   if (!s.hasMitre(c.mitre) || s.repeat < c.repeatAtLeast) return null;
@@ -112,13 +138,23 @@ function scoreRepeat(p, s) {
   return ALERT_AT + (1 - ALERT_AT) * ((levelScore(s, c) + repeatScore) / 2);
 }
 
-// 반복 없는 한 번짜리 의심 표기는 차단 확신도까지 올리지 않습니다.
+/**
+ * 반복 없는 한 번짜리 의심 표기(single_injection_marker)의 확신도를 매깁니다. 오탐일 수 있어 차단 확신도까지 올리지 않습니다.
+ * @param {object} p single_injection_marker 패턴(조건값 condition 을 씁니다)
+ * @param {object} s readSignals 가 꺼낸 신호
+ * @returns {number|null} 확신도(최대 maxConfidence). 패턴과 맞지 않으면 null
+ */
 function scoreSingle(p, s) {
   const c = p.condition;
   if (!s.hasMitre(c.mitre) || s.repeat >= c.repeatBelow) return null;
   return Math.min(c.maxConfidence, ALERT_AT + (1 - ALERT_AT) * (levelScore(s, c) / 2));
 }
 
+/**
+ * 경보 하나를 보고 맞는 패턴 가운데 가장 높은 확신도로 차단(block)·알림(alert)·기록(record) 중 하나를 고릅니다.
+ * @param {object} alert 판단할 Wazuh 경보 하나
+ * @returns {{action: 'block'|'alert'|'record', confidence: number, reason: string}} 판단 결과
+ */
 export function decide(alert) {
   const s = readSignals(alert);
   const matched = [];

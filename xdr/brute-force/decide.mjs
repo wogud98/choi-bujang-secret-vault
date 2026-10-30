@@ -38,9 +38,24 @@ const SUCCESS_CAP = 0.8;
 // 판단 시작 수준. 이 아래 수준은 패턴과 맞는 정도를 0 으로 봅니다.
 const BASE_LEVEL = 5;
 
+/**
+ * 숫자를 0~1 사이로 자릅니다. 숫자가 아니면 0 입니다.
+ * @param {number} n 자를 숫자
+ * @returns {number} 0~1 사이 값
+ */
 const clamp01 = (n) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
+/**
+ * 숫자를 소수 둘째 자리까지 반올림합니다.
+ * @param {number} n 반올림할 숫자
+ * @returns {number} 반올림한 값
+ */
 const round2 = (n) => Math.round(n * 100) / 100;
 
+/**
+ * 경보 하나에서 판단에 쓰는 신호(설명·수준·실패 횟수·계정 수·MITRE 기법·실패 뒤 성공 여부)를 꺼냅니다.
+ * @param {object} alert 판단할 경보 하나
+ * @returns {{description: string, level: number, failCount: number, accounts: number, hasMitre: (id: string) => boolean, successAfter: boolean}} 꺼낸 신호
+ */
 function readSignals(alert) {
   const description = typeof alert?.rule?.description === 'string' ? alert.rule.description : '';
   const mitre = Array.isArray(alert?.rule?.mitre) ? alert.rule.mitre : [];
@@ -69,7 +84,12 @@ function readSignals(alert) {
   };
 }
 
-// 패턴마다 0~1 확신도를 매깁니다. 맞지 않으면 null 입니다.
+/**
+ * 한 주소의 연속 로그인 실패(same_source_failure_burst) 패턴과 맞는 정도를 0~1 확신도로 매깁니다.
+ * @param {object} p PATTERNS 의 패턴 하나(조건값 condition 을 씁니다)
+ * @param {object} s readSignals 가 꺼낸 신호
+ * @returns {number|null} 확신도. 패턴과 맞지 않으면 null
+ */
 function scoreBurst(p, s) {
   const c = p.condition;
   if (!s.hasMitre(c.mitre) || !s.description.includes(c.descriptionHas)) return null;
@@ -81,6 +101,12 @@ function scoreBurst(p, s) {
   return confidence;
 }
 
+/**
+ * 여러 계정 비밀번호 스프레이(multi_account_password_spray) 패턴과 맞는 정도를 0~1 확신도로 매깁니다.
+ * @param {object} p PATTERNS 의 패턴 하나(조건값 condition 을 씁니다)
+ * @param {object} s readSignals 가 꺼낸 신호
+ * @returns {number|null} 확신도. 패턴과 맞지 않으면 null
+ */
 function scoreSpray(p, s) {
   const c = p.condition;
   if (!s.hasMitre(c.mitre)) return null;
@@ -99,6 +125,11 @@ const SCORERS = Object.freeze({
   multi_account_password_spray: scoreSpray,
 });
 
+/**
+ * 경보 하나를 보고 가장 잘 맞는 패턴의 확신도로 차단(block)·알림(alert)·기록(record) 중 하나를 고릅니다.
+ * @param {object} alert 판단할 Wazuh 경보 하나
+ * @returns {{action: 'block'|'alert'|'record', confidence: number, reason: string}} 판단 결과
+ */
 export function decide(alert) {
   const s = readSignals(alert);
   let best = null;

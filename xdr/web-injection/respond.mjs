@@ -15,8 +15,20 @@ const ALERTS_LOG = new URL('../alerts.log', import.meta.url);
 // 같은 주소에서 반복된 명확한 주입(block)만 규칙으로 넣고, 한 번짜리 의심 표기(alert)는 알림으로만 남깁니다.
 const BLOCK_MINUTES = 60;
 
+/**
+ * 경보의 출발 주소(data.srcip)를 꺼냅니다.
+ * @param {object} alert 경보 하나
+ * @returns {string} 출발 주소. 없거나 문자열이 아니면 빈 문자열
+ */
 const sourceOf = (alert) => (typeof alert?.data?.srcip === 'string' ? alert.data.srcip : '');
 
+/**
+ * 차단(block) 판단이 나온 경보를 출발 주소별로 묶어 1시간짜리 거부 규칙 목록을 만듭니다.
+ * 정상 사건이 나온 주소는 정상 사용자 주소로 보고 규칙에서 뺍니다.
+ * @param {object[]} alerts 경보 묶음의 경보 목록
+ * @param {{action: string, confidence: number, reason: string}[]} decisions alerts 와 같은 순서의 decide 판단 결과 목록
+ * @returns {object[]} 주소마다 하나씩 만든 거부 규칙 목록
+ */
 export function buildDenyRules(alerts, decisions) {
   // 정상(record) 요청이 나온 주소는 정상 사용자 주소로 보고 막지 않습니다.
   const trusted = new Set();
@@ -48,7 +60,13 @@ export function buildDenyRules(alerts, decisions) {
   return [...bySource.values()];
 }
 
-// 판정기에 더할 확인 단계: 주소가 유효한 거부 규칙에 걸리면 true 입니다.
+/**
+ * 판정기에 더할 확인 단계입니다. 주소가 그 시각에 유효한 거부 규칙에 걸리는지 봅니다.
+ * @param {object[]} rules buildDenyRules 가 만든 거부 규칙 목록
+ * @param {string} srcip 확인할 출발 주소
+ * @param {string|number|Date} at 확인할 시각
+ * @returns {boolean} 유효한 규칙에 걸리면 true
+ */
 export function isBlocked(rules, srcip, at) {
   const t = new Date(at).getTime();
   return rules.some((r) => r.srcip === srcip
@@ -56,6 +74,12 @@ export function isBlocked(rules, srcip, at) {
     && t < new Date(r.expiresAt).getTime());
 }
 
+/**
+ * 기록(record)이 아닌 판단을 xdr/alerts.log 에 한 줄씩 덧붙입니다. 이미 적힌 경보 id 는 다시 적지 않습니다.
+ * @param {object[]} alerts 경보 묶음의 경보 목록
+ * @param {{action: string, confidence: number, reason: string}[]} decisions alerts 와 같은 순서의 decide 판단 결과 목록
+ * @returns {Promise<number>} 새로 덧붙인 줄 수
+ */
 async function appendAlertLines(alerts, decisions) {
   let logged = '';
   try {
@@ -74,6 +98,11 @@ async function appendAlertLines(alerts, decisions) {
   return lines.length;
 }
 
+/**
+ * 시험 경보를 모두 판단하고, 거부 규칙 파일을 쓰고, 알림을 남긴 뒤 규칙이 무엇을 막는지 다시 흘려 봅니다.
+ * 받는 값은 없습니다.
+ * @returns {Promise<{rules: object[], appended: number, replay: object}>} 거부 규칙, 덧붙인 알림 줄 수, 판단별 막힌 수
+ */
 export async function respond() {
   const fixture = JSON.parse(await readFile(FIXTURE, 'utf8'));
   const alerts = fixture.alerts;
