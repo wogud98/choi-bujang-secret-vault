@@ -1,0 +1,106 @@
+{
+  "schema": "aleph.xdr.deny-rules.v1",
+  "moduleKey": "brute-force",
+  "rules": [
+    {
+      "ruleId": "xdr.brute_force.deny.203.0.113.10",
+      "kind": "deny_source",
+      "srcip": "203.0.113.10",
+      "reason": "same_source_failure_burst (T1110.001)",
+      "startsAt": "2026-09-27T00:12:01.000Z",
+      "expiresAt": "2026-09-27T01:12:40.000Z",
+      "evidenceAlertIds": [
+        "bf-01",
+        "bf-02"
+      ]
+    },
+    {
+      "ruleId": "xdr.brute_force.deny.198.51.100.20",
+      "kind": "deny_source",
+      "srcip": "198.51.100.20",
+      "reason": "same_source_failure_burst (T1110.001)",
+      "startsAt": "2026-09-27T00:14:02.000Z",
+      "expiresAt": "2026-09-27T01:14:02.000Z",
+      "evidenceAlertIds": [
+        "bf-03"
+      ]
+    },
+    {
+      "ruleId": "xdr.brute_force.deny.192.0.2.30",
+      "kind": "deny_source",
+      "srcip": "192.0.2.30",
+      "reason": "same_source_failure_burst (T1110.001)",
+      "startsAt": "2026-09-27T00:20:11.000Z",
+      "expiresAt": "2026-09-27T01:20:11.000Z",
+      "evidenceAlertIds": [
+        "bf-04"
+      ]
+    },
+    {
+      "ruleId": "xdr.brute_force.deny.203.0.113.21",
+      "kind": "deny_source",
+      "srcip": "203.0.113.21",
+      "reason": "multi_account_password_spray (T1110.003)",
+      "startsAt": "2026-09-27T00:21:00.000Z",
+      "expiresAt": "2026-09-27T01:21:00.000Z",
+      "evidenceAlertIds": [
+        "bf-05"
+      ]
+    },
+    {
+      "ruleId": "xdr.brute_force.deny.198.51.100.44",
+      "kind": "deny_source",
+      "srcip": "198.51.100.44",
+      "reason": "same_source_failure_burst (T1110.001)",
+      "startsAt": "2026-09-27T02:02:15.000Z",
+      "expiresAt": "2026-09-27T03:02:15.000Z",
+      "evidenceAlertIds": [
+        "bf-06"
+      ]
+    },
+    {
+      "ruleId": "xdr.brute_force.deny.203.0.113.15",
+      "kind": "deny_source",
+      "srcip": "203.0.113.15",
+      "reason": "same_source_failure_burst (T1110.001)",
+      "startsAt": "2026-09-27T02:05:40.000Z",
+      "expiresAt": "2026-09-27T03:05:40.000Z",
+      "evidenceAlertIds": [
+        "bf-07"
+      ]
+    },
+    {
+      "ruleId": "xdr.brute_force.deny.192.0.2.18",
+      "kind": "deny_source",
+      "srcip": "192.0.2.18",
+      "reason": "same_source_failure_burst (T1110.001)",
+      "startsAt": "2026-09-27T04:10:02.000Z",
+      "expiresAt": "2026-09-27T05:10:02.000Z",
+      "evidenceAlertIds": [
+        "bf-08"
+      ]
+    },
+    {
+      "ruleId": "xdr.brute_force.deny.198.51.100.8",
+      "kind": "deny_source",
+      "srcip": "198.51.100.8",
+      "reason": "multi_account_password_spray (T1110.003)",
+      "startsAt": "2026-09-27T05:22:18.000Z",
+      "expiresAt": "2026-09-27T06:22:18.000Z",
+      "evidenceAlertIds": [
+        "bf-09"
+      ]
+    },
+    {
+      "ruleId": "xdr.brute_force.deny.203.0.113.40",
+      "kind": "deny_source",
+      "srcip": "203.0.113.40",
+      "reason": "same_source_failure_burst (T1110.001)",
+      "startsAt": "2026-09-27T06:40:01.000Z",
+      "expiresAt": "2026-09-27T07:40:01.000Z",
+      "evidenceAlertIds": [
+        "bf-10"
+      ]
+    }
+  ]
+}

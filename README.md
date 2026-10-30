@@ -24,6 +24,13 @@
 
 `src/decider.mjs`와 `src/detect.mjs`의 로컬 시험은 반 엔진이나 운영 심판의 결과가 아닙니다. 1단계 이후 제출 묶음 계약 `aleph.defense.submission.v2`는 `scripts/bundle.mjs`에 남아 있으며, 코딩 도구가 해당 단계의 최신 배포 주소와 Git 원격을 맞춘 뒤 사용합니다.
 
+## 보너스 xdr-01 저장점: 무차별 로그인 공격 탐지
+
+- 작동: `xdr/brute-force/decide.mjs`가 Wazuh 모양 연습 경보 하나를 받아 `block`·`alert`·`record`와 확신도, 근거 패턴 이름을 돌려줍니다. 패턴은 MITRE ATT&CK T1110의 두 형태(같은 주소 실패 연속 T1110.001, 여러 계정 비밀번호 스프레이 T1110.003)이고, `patterns.json`과 파일 맨 위 상수가 같습니다. `decide.mjs`에는 `import`가 없고 파일 읽기·쓰기·네트워크도 없습니다.
+- 알림과 차단: `xdr/brute-force/respond.mjs`가 `alert`·`block`을 `xdr/alerts.log`에 한 줄씩 쌓고(같은 경보는 한 번만), `block` 주소만 근거 경보 번호와 1시간 만료 시각을 붙여 `xdr/brute-force/deny-rules.json`에 거부 규칙으로 둡니다. 정상 사건이나 실패 뒤 성공이 나온 주소는 규칙에 넣지 않습니다.
+- 판정기 연결: `src/decider.mjs`는 고치지 않았습니다(6단계 전, `starter.deny`만 있음). 현재 판정 요청 계약에는 출발 주소 칸이 없어서, 거부 규칙은 운영 엔진이 주소를 계약으로 넘겨줄 때 `isBlocked()` 확인 단계로 꽂습니다.
+- 다시 실행: `npm run xdr:run -- brute-force`(→ `xdr/brute-force/result.json`), `node xdr/brute-force/respond.mjs`(알림·거부 규칙·다시 흘리기 결과), `node xdr/brute-force/read-alerts.mjs`(경보 확인용 목록). 로컬 결과는 연습 경보 기준이며 심판 판정이 아닙니다.
+
 ## 5단계 저장점: 자료 요청을 서버 한곳으로
 
 - 작동: 브라우저의 메모 읽기·추가·수정·삭제는 모두 Vercel 서버 함수 `/api/notes`만 부릅니다. 화면이 Supabase를 직접 부르는 곳은 로그인·로그아웃(Auth)뿐이고, 메모 테이블을 직접 부르는 코드는 없습니다(제작1 확인 결과 "없음", 화면 코드 변경 없음).
