@@ -24,6 +24,31 @@
 
 `src/decider.mjs`와 `src/detect.mjs`의 로컬 시험은 반 엔진이나 운영 심판의 결과가 아닙니다. 1단계 이후 제출 묶음 계약 `aleph.defense.submission.v2`는 `scripts/bundle.mjs`에 남아 있으며, 코딩 도구가 해당 단계의 최신 배포 주소와 Git 원격을 맞춘 뒤 사용합니다.
 
+## 6단계 저장점: 등록한 기기만 자료실에 들어옵니다
+
+- 작동: `src/decider.mjs`의 `decide(request)`에 규칙 `device_registered`를 더했습니다. 요청의 `deviceRegistered`가 `true`이고, 로그인한 주체(`subjectId`)가 내 자료실을 읽는 요청(`service` `notes`, `method` `GET`, `route` `GET /notes` 또는 `GET /notes/:id`)일 때만 `allow`·`approved`입니다.
+- 거부: `deviceRegistered`가 `false`이거나 값이 없으면 `deny`·`device_not_registered`(규칙 `device_registered`)입니다. 등록 기기라도 읽기가 아닌 요청은 시작 틀의 기본 거부 `deny`·`starter_not_ready`(규칙 `starter.deny`)로 남겨 두었습니다.
+- 판정기는 `docs/DECIDER_REQUEST.md` 계약의 `requestId`·`subjectId`·`deviceRegistered`·`service`·`method`·`route`만 읽습니다. 계약에 없는 `request.role`·`identity`·`device`는 읽지 않습니다. 응답은 다섯 항목 그대로이고 `ruleIds`는 모두 `RULE_IDS`(`starter.deny`, `device_registered`)에 있습니다.
+- 바꾸지 않은 것: 자료실 주소, 브라우저 화면, `/api/notes`·`/api/session`의 로그인·소유자 검사, DB 권한. 이번 단계에는 따로 설치할 접속 프로그램이 없습니다.
+- `aleph.config.json`: `step` 6. `allowedRoutes`·`identityProvider`·`originalApiUrl`은 5단계 그대로이고 `judgeIssuer`는 바꾸지 않았습니다. `src/attack-check.mjs`는 6단계에도 5단계의 자료실 주소 점검을 그대로 보냅니다.
+
+### 6단계 확인 순서
+
+1. `npm install`
+2. `npm run decider:test`를 실행합니다. 정상 출력은 아래 두 줄이 모두 「통과」입니다.
+
+   ```text
+   통과 · 등록 기기의 정상 요청
+   통과 · 미등록 기기의 가상 요청
+   ```
+
+   「등록 기기의 정상 요청」은 `allow`, 「미등록 기기의 가상 요청」(`deviceRegistered: false`)은 `deny`·`device_not_registered`여야 통과입니다. 하나라도 「확인 필요」가 나오면 명령이 실패로 끝납니다.
+3. 이 시험은 가상 요청 연습이며 심판 판정이 아닙니다. 실제 미등록 기기 공격은 심판이 보내고 결과는 포털에서 확인합니다.
+4. 등록 기기에서 배포 주소 `/`를 열어 로그인하면 기존 화면과 메모 읽기·추가·수정·삭제가 그대로 됩니다.
+5. `npm run bundle`(`bundle-notes.json` 필요)로 제출 묶음을 만듭니다. `policyRules`에 `device_registered`가 들어갑니다.
+
+- 참고: `npm run fixture:7`(7단계 연습)은 복합 이상 요청에 `step_up`을 기대하므로 지금은 실패하는 것이 정상입니다.
+
 ## 보너스 xdr-02 저장점: 웹 주입 공격 탐지
 
 - 작동: `xdr/web-injection/decide.mjs`가 Wazuh 모양 연습 경보 하나를 받아 `block`·`alert`·`record`와 확신도, 근거 패턴 이름을 돌려줍니다. 패턴은 MITRE ATT&CK T1190(외부 공개 앱 악용)의 반복 주입 네 형태(SQL 구문, 스크립트 태그, 경로 거슬러 올라가기, 명령 구분자)와 반복 없는 한 번짜리 의심 표기(최대 확신도 0.8, 차단하지 않음)이고, `patterns.json`과 파일 맨 위 상수가 같습니다. `decide.mjs`에는 `import`가 없고 파일 읽기·쓰기·네트워크도 없습니다.
