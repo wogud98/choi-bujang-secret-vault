@@ -24,6 +24,22 @@
 
 `src/decider.mjs`와 `src/detect.mjs`의 로컬 시험은 반 엔진이나 운영 심판의 결과가 아닙니다. 1단계 이후 제출 묶음 계약 `aleph.defense.submission.v2`는 `scripts/bundle.mjs`에 남아 있으며, 코딩 도구가 해당 단계의 최신 배포 주소와 Git 원격을 맞춘 뒤 사용합니다.
 
+## 7단계 저장점: 평소와 다른 접속은 다시 확인합니다
+
+- 입력 검사(제작 1): `readSignals`는 엔진이 넘긴 `signals`의 출처가 `judge_fixture`이고 `network`·`hour`가 계약 모양일 때만 믿습니다. 실제 경로의 `none`, 모르는 출처(예: 브라우저가 꾸민 헤더 값), 값이 빠진 경우는 믿지 않고 정상값으로 채우지도 않습니다(`network` `unknown`, `hour` 없음). `recentEvents`는 12건 이하 `{kind, ageSeconds, count}`일 때만 세고, `stepUp`은 `verified` true와 0~900초 정수 나이일 때만 확인된 것으로 봅니다. 위치(`region`)는 판정 근거로 읽지 않습니다.
+- 규칙(제작 2) `step_up_required`: 등록 기기의 내 자료실 읽기라도 믿을 수 있는 가상 사건에서 **평소와 다른 시각(07시 전·23시 이후) + 처음 보는 네트워크(`unusual`) + 최근 10분 사건 합 10건 이상**이 모두 겹치면 `step_up`·`step_up_required`입니다. 차단(`deny`)이 아니라 엔진에 다시 로그인 확인을 요청하고, 지역 하나나 두 조건만으로는 걸리지 않습니다. 기존 `device_registered` 규칙(미등록 `deny`)은 그대로 먼저 봅니다.
+- 다시 로그인(제작 3): 계약의 `stepUp`이 엔진이 확인한 새 로그인 시각입니다. 엔진이 확인한 새 로그인이 5분 이내(`authAgeSeconds` ≤ 300)일 때만 같은 요청을 다시 판정해 `allow`·`approved`(규칙 `step_up_required`)로 돌려주고, 확인 전이나 오래된 로그인은 계속 `step_up`입니다. 이 저장소에는 엔진·릴레이가 없고 실제 경로의 `signals`는 `none`이므로, **실제 자료 차단과 새 로그인 뒤 허용은 미실행**입니다. 계약이 준비된 반 엔진에서 심판이 실측합니다. 토큰 원문은 판정기·로그·묶음에 남기지 않습니다.
+- 판정기는 계약의 `requestId`·`subjectId`·`deviceRegistered`·`service`·`method`·`route`·`signals`·`recentEvents`·`stepUp`만 읽습니다. `request.role`·`identity`·`device`·`geo`는 읽지 않습니다. 응답은 다섯 항목 그대로이고 `ruleIds`는 모두 `RULE_IDS`(`starter.deny`, `device_registered`, `step_up_required`)에 있습니다.
+- 바꾸지 않은 것: 자료실 주소, 브라우저 화면, `/api/notes`·`/api/session`, DB 권한. `aleph.config.json`은 `step` 7만 바꿨고 `judgeIssuer`는 그대로입니다. `src/attack-check.mjs`는 7단계에도 6단계의 자료실 주소 점검을 그대로 보냅니다.
+
+### 7단계 확인 순서
+
+1. `npm install`
+2. `npm run fixture:7` → `정상 사건: allow`, `복합 이상 사건: step_up`
+3. `npm run decider:test` → 네 줄 모두 「통과」(등록 기기 정상, 미등록 기기, 복합 이상 접속 `step_up`, 다시 확인한 복합 이상 접속 `allow`)
+4. 두 명령은 가상 요청 연습이며 심판 판정이 아닙니다. 등록 기기에서 배포 주소 `/`에 로그인하면 기존 화면과 메모 읽기·추가·수정·삭제가 그대로 됩니다.
+5. `npm run bundle`(`bundle-notes.json` 필요). `policyRules`에 `step_up_required`가 들어갑니다.
+
 ## 6단계 저장점: 등록한 기기만 자료실에 들어옵니다
 
 - 작동: `src/decider.mjs`의 `decide(request)`에 규칙 `device_registered`를 더했습니다. 요청의 `deviceRegistered`가 `true`이고, 로그인한 주체(`subjectId`)가 내 자료실을 읽는 요청(`service` `notes`, `method` `GET`, `route` `GET /notes` 또는 `GET /notes/:id`)일 때만 `allow`·`approved`입니다.
@@ -47,7 +63,7 @@
 4. 등록 기기에서 배포 주소 `/`를 열어 로그인하면 기존 화면과 메모 읽기·추가·수정·삭제가 그대로 됩니다.
 5. `npm run bundle`(`bundle-notes.json` 필요)로 제출 묶음을 만듭니다. `policyRules`에 `device_registered`가 들어갑니다.
 
-- 참고: `npm run fixture:7`(7단계 연습)은 복합 이상 요청에 `step_up`을 기대하므로 지금은 실패하는 것이 정상입니다.
+- 참고: `npm run fixture:7`(7단계 연습)은 복합 이상 요청에 `step_up`을 기대하므로 6단계에서는 실패하는 것이 정상이었습니다(7단계에서 통과).
 
 ## 보너스 xdr-02 저장점: 웹 주입 공격 탐지
 

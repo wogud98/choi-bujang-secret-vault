@@ -137,7 +137,8 @@ const CROSS_NOT_RUN = '미실행: ALEPH_CHECK_TOKEN_B·ALEPH_CHECK_NOTE_A 환경
 export async function runAttackChecks(config) {
   // 5단계는 4단계 점검을 그대로 보내고, anon 키 직접 요청만 originalApiUrl로 보냅니다.
   // 6단계는 기기 조건을 판정기에만 넣었으므로 자료실 주소 점검은 5단계와 같습니다. 미등록 기기 공격은 심판이 맡습니다.
-  if (config.step === 4 || config.step === 5 || config.step === 6) {
+  // 7단계는 복합 이상 접속 규칙을 판정기에만 넣었으므로 자료실 주소 점검은 6단계와 같습니다. 가상 접속 사건은 심판이 보냅니다.
+  if (config.step === 4 || config.step === 5 || config.step === 6 || config.step === 7) {
     const app = appUrl(config);
     const list = await apiProbe(app, 'GET', '/api/notes');
     const one = await apiProbe(app, 'GET', `/api/notes/${PROBE_ID}`);
