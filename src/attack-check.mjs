@@ -126,7 +126,7 @@ async function crossUserProbe(app, method, path, token, body) {
   let leaked = false;
   try {
     const data = await response.json();
-    leaked = typeof data?.id === 'string' || typeof data?.body === 'string';
+    leaked = (Array.isArray(data) && data.length > 0) || typeof data?.id === 'string' || typeof data?.body === 'string';
   } catch {
     // A non-JSON response carries no note.
   }
@@ -138,7 +138,8 @@ export async function runAttackChecks(config) {
   // 5단계는 4단계 점검을 그대로 보내고, anon 키 직접 요청만 originalApiUrl로 보냅니다.
   // 6단계는 기기 조건을 판정기에만 넣었으므로 자료실 주소 점검은 5단계와 같습니다. 미등록 기기 공격은 심판이 맡습니다.
   // 7단계는 복합 이상 접속 규칙을 판정기에만 넣었으므로 자료실 주소 점검은 6단계와 같습니다. 가상 접속 사건은 심판이 보냅니다.
-  if (config.step === 4 || config.step === 5 || config.step === 6 || config.step === 7) {
+  // 8단계는 같은 점검에 구역 점검을 더합니다: 강사 자료를 토큰 없이·B 토큰으로 읽기, 반 공지 쓰기(본문에 role 끼워 넣기).
+  if (config.step >= 4 && config.step <= 8) {
     const app = appUrl(config);
     const list = await apiProbe(app, 'GET', '/api/notes');
     const one = await apiProbe(app, 'GET', `/api/notes/${PROBE_ID}`);
@@ -150,6 +151,21 @@ export async function runAttackChecks(config) {
     const readA = cross ? await crossUserProbe(app, 'GET', `/api/notes/${noteA}`, tokenB) : { ran: false };
     const takeA = cross ? await crossUserProbe(app, 'PUT', `/api/notes/${noteA}`, tokenB,
       { title: '점검', body: '소유자 변경 시도', owner_id: PROBE_ID }) : { ran: false };
+    const zone = config.step >= 8;
+    const materialsAnon = zone ? await apiProbe(app, 'GET', '/api/materials') : null;
+    const noticeWrite = zone ? await crossUserProbe(app, 'POST', '/api/notices', tokenB ?? forgedToken(config),
+      { title: '점검', body: '공지 쓰기 시도', role: 'instructor' }) : null;
+    const materialsB = zone && tokenB ? await crossUserProbe(app, 'GET', '/api/materials', tokenB) : { ran: false };
+    const zoneChecks = !zone ? [] : [
+      { attackId: 'anonymous_instructor_materials', expected: '토큰 없는 GET /api/materials는 401로 거부되고 자료가 없음',
+        observed: probeResult(materialsAnon, '토큰 없는 GET /api/materials') },
+      { attackId: 'notice_write_with_role', expected: '본문에 role을 넣은 POST /api/notices는 405로 거부됨(공지는 읽기만)',
+        observed: !noticeWrite.ran ? NOT_RUN
+          : `${tokenB ? 'B 토큰' : '위조 토큰'} POST /api/notices(role 포함) 결과 HTTP ${noticeWrite.status}, ${noticeWrite.leaked ? '자료가 응답에 포함됨' : '자료 없음'}` },
+      { attackId: 'student_reads_instructor_materials', expected: '강사로 저장되지 않은 B 토큰의 GET /api/materials는 403으로 거부됨',
+        observed: !materialsB.ran ? (tokenB ? NOT_RUN : '미실행: ALEPH_CHECK_TOKEN_B 환경변수가 없어 B 토큰 요청을 보내지 않음')
+          : `B 토큰 GET /api/materials 결과 HTTP ${materialsB.status}, ${materialsB.leaked ? '자료가 응답에 포함됨' : '자료 없음'}` },
+    ];
     return [
       { attackId: 'anonymous_notes_list', expected: '토큰 없는 GET /api/notes는 401로 거부되고 자료가 없음',
         observed: probeResult(list, '토큰 없는 GET /api/notes') },
@@ -168,6 +184,7 @@ export async function runAttackChecks(config) {
       { attackId: 'cross_user_owner_change', expected: 'owner_id를 넣은 PUT은 400으로 거부되고 메모가 바뀌지 않음',
         observed: !takeA.ran ? (cross ? NOT_RUN : CROSS_NOT_RUN)
           : `B 토큰 PUT /api/notes/<A 메모>(owner_id 포함) 결과 HTTP ${takeA.status}, ${takeA.leaked ? '메모가 응답에 포함됨' : '자료 없음'}` },
+      ...zoneChecks,
     ];
   }
   if (config.step === 3) {

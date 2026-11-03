@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import config from '../aleph.config.json' with { type: 'json' };
 import { createLoginVerifier } from '../src/verify-login.mjs';
+import { ZONES, resourceId } from '../src/resources.mjs';
+import { deny } from '../src/api-deny.mjs';
 
 // 2단계: 학습용 Supabase 테이블의 가상 메모를 서버에서만 읽습니다.
 // 서버 전용 키는 Vercel 환경변수에서만 읽고, 응답·로그·브라우저 파일에 넣지 않습니다.
@@ -10,13 +12,16 @@ import { createLoginVerifier } from '../src/verify-login.mjs';
 // 4단계: 읽기·추가·수정·삭제 모두 토큰에서 확인한 사용자 ID와 DB의 owner_id가 같은 행만 다룹니다.
 // URL·본문의 owner_id는 믿지 않고, 본문에 정해진 칸 외의 값이 있으면 기본 거부합니다.
 // 남의 메모는 있는지 없는지도 알리지 않도록 없는 메모와 같은 404로 답합니다.
+// 8단계: 메뉴를 우회한 직접 요청도 같은 검사를 거칩니다. 검증된 토큰의 사용자 ID와 DB에 저장된 owner_id만 대조하고,
+// 본문·쿼리의 role이나 owner_id는 믿지 않습니다(본문에 있으면 400). 거부할 때는 사유 코드를 짧게 로그에 남깁니다.
 let verifyLogin;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const MAX_TITLE = 200;
 const MAX_BODY = 5000;
 
-const toNote = (row) => ({ id: row.note_id, title: row.title, body: row.content });
+// 8단계: 각 메모에 'notes:<메모 ID>' 자원 ID를 붙여 강사 공지('notices:…')와 구별합니다. 기존 id·title·body는 그대로입니다.
+const toNote = (row) => ({ id: row.note_id, resourceId: resourceId(ZONES.notes, row.note_id), title: row.title, body: row.content });
 
 function readJson(request) {
   if (typeof request.body === 'string') {
@@ -72,11 +77,11 @@ export default async function handler(request, response) {
   }
   if (!login) {
     response.setHeader('WWW-Authenticate', 'Bearer');
-    response.status(401).json({ error: 'LOGIN_REQUIRED' });
+    deny(response, 401, 'LOGIN_REQUIRED', 'login_not_verified', ZONES.notes);
     return;
   }
   if (id && !UUID.test(id)) {
-    response.status(404).json({ error: 'NOTE_NOT_FOUND' });
+    deny(response, 404, 'NOTE_NOT_FOUND', 'note_id_malformed', ZONES.notes);
     return;
   }
 
@@ -88,7 +93,7 @@ export default async function handler(request, response) {
         || !validText(input.title, MAX_TITLE) || !validText(input.body, MAX_BODY)
         || (request.method === 'POST' && input.id !== undefined
           && (typeof input.id !== 'string' || !UUID.test(input.id)))) {
-      response.status(400).json({ error: 'INVALID_NOTE' });
+      deny(response, 400, 'INVALID_NOTE', 'body_not_allowed', ZONES.notes);
       return;
     }
   }
@@ -144,7 +149,7 @@ export default async function handler(request, response) {
     return;
   }
   if (result === undefined) {
-    response.status(404).json({ error: 'NOTE_NOT_FOUND' });
+    deny(response, 404, 'NOTE_NOT_FOUND', 'not_owner_or_missing', ZONES.notes);
     return;
   }
   response.status(status).json(result);

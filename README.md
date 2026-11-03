@@ -24,6 +24,21 @@
 
 `src/decider.mjs`와 `src/detect.mjs`의 로컬 시험은 반 엔진이나 운영 심판의 결과가 아닙니다. 1단계 이후 제출 묶음 계약 `aleph.defense.submission.v2`는 `scripts/bundle.mjs`에 남아 있으며, 코딩 도구가 해당 단계의 최신 배포 주소와 Git 원격을 맞춘 뒤 사용합니다.
 
+## 8단계 저장점: 자료마다 갈 수 있는 구역을 나눕니다
+
+- 자원 ID(제작 1): `src/resources.mjs`가 구역을 `notes`(내 메모)·`notices`(강사 공지)·`materials`(강사 자료)로 나눕니다. `/api/notes` 응답의 각 메모에 `resourceId: "notes:<메모 ID>"`를 더했고(기존 `id`·`title`·`body`와 주소는 그대로), 새 `GET /api/notices`·`GET /api/notices/:id`는 가상 공지 두 건을 `resourceId: "notices:<공지 ID>"`로 돌려줍니다. 화면 메뉴는 바꾸지 않았습니다.
+- 판정기(제작 2) `resource_zone`: 구역별 정확한 경로만 허용합니다. 메모는 `GET·PUT·DELETE /notes/:id`(자료 ID 하나)만 허용하고 ID 없는 `GET /notes` 목록과 `POST /notes`는 거부합니다. 반 공지는 `GET /notices`·`GET /notices/:id`만 허용하고 쓰기는 누구에게나 거부합니다. 강사 자료는 모두 거부합니다. `path`가 `route` 모양과 깊이까지 같아야 하고(`/notes/abc/export` 거부), 쿼리가 붙은 요청(`queryLength` 0이 아님)도 거부합니다. 모르는 구역은 시작 틀 기본 거부(`starter.deny`)입니다. ID 형식은 좁히지 않고 메모 주인 비교는 API가 합니다. 거부 이유 코드 `resource_zone_denied`는 새 코드라 운영 등록부에 없으면 엔진이 어차피 거부합니다. 기존 `device_registered`(먼저)와 `step_up_required` 규칙은 그대로입니다.
+- 자료 API(제작 3): 메뉴를 우회한 직접 요청도 서버가 다시 확인합니다. 메모는 검증된 토큰 사용자 ID와 DB의 `owner_id`가 같은 행만(남의 메모 404, 본문의 `role`·`owner_id` 400). 공지는 로그인한 사람 누구나 읽기만, 쓰기는 `405 NOTICES_READ_ONLY`. 새 `GET /api/materials`는 서버에 저장된 강사 목록(Vercel 환경변수 `INSTRUCTOR_USER_IDS`, 쉼표로 구분한 사용자 UUID)에 있을 때만 열고 아니면 `403 INSTRUCTOR_ONLY`입니다. 이 값이 없으면 아무도 강사가 아닙니다. 거부할 때는 `api_denied zone=… reason=…`만 로그에 남깁니다(사용자 ID·토큰·본문 없음).
+- `aleph.config.json`: `step` 8, `allowedRoutes`는 판정기가 허용하는 경로만(`GET·PUT·DELETE /api/notes/:id`, `GET /api/notices`, `GET /api/notices/:id`). `judgeIssuer`는 그대로입니다. 이 저장소에는 엔진이 없어 화면의 메모 목록·추가(`GET·POST /api/notes`)와 로그인(`/api/session`)은 지금처럼 작동합니다. 엔진 앞에서 실제 구역 차단은 미실행입니다.
+- `src/attack-check.mjs`: 7단계 점검에 토큰 없는 `GET /api/materials`, `role`을 넣은 `POST /api/notices`, (선택) B 토큰 `GET /api/materials`를 더했습니다.
+
+### 8단계 확인 순서
+
+1. `npm install`
+2. `npm run decider:test` → 네 줄 모두 「통과」, `npm run fixture:7` → `allow`·`step_up`
+3. 배포 주소 `/`에 A로 로그인 → 메모 읽기·추가·수정·삭제가 그대로 됨(정상)
+4. `npm run bundle`(`bundle-notes.json` 필요) → 토큰 없는 `/api/materials` 401, 공지 쓰기 405, B 토큰 강사 자료 403이면 정상. 자료가 보이면 실패입니다.
+
 ## 7단계 저장점: 평소와 다른 접속은 다시 확인합니다
 
 - 입력 검사(제작 1): `readSignals`는 엔진이 넘긴 `signals`의 출처가 `judge_fixture`이고 `network`·`hour`가 계약 모양일 때만 믿습니다. 실제 경로의 `none`, 모르는 출처(예: 브라우저가 꾸민 헤더 값), 값이 빠진 경우는 믿지 않고 정상값으로 채우지도 않습니다(`network` `unknown`, `hour` 없음). `recentEvents`는 12건 이하 `{kind, ageSeconds, count}`일 때만 세고, `stepUp`은 `verified` true와 0~900초 정수 나이일 때만 확인된 것으로 봅니다. 위치(`region`)는 판정 근거로 읽지 않습니다.
