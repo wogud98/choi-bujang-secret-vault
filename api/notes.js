@@ -3,6 +3,7 @@ import config from '../aleph.config.json' with { type: 'json' };
 import { createLoginVerifier } from '../src/verify-login.mjs';
 import { ZONES, resourceId } from '../src/resources.mjs';
 import { deny } from '../src/api-deny.mjs';
+import { requireDevice } from '../src/device-proof.mjs';
 
 // 2단계: 학습용 Supabase 테이블의 가상 메모를 서버에서만 읽습니다.
 // 서버 전용 키는 Vercel 환경변수에서만 읽고, 응답·로그·브라우저 파일에 넣지 않습니다.
@@ -14,6 +15,8 @@ import { deny } from '../src/api-deny.mjs';
 // 남의 메모는 있는지 없는지도 알리지 않도록 없는 메모와 같은 404로 답합니다.
 // 8단계: 메뉴를 우회한 직접 요청도 같은 검사를 거칩니다. 검증된 토큰의 사용자 ID와 DB에 저장된 owner_id만 대조하고,
 // 본문·쿼리의 role이나 owner_id는 믿지 않습니다(본문에 있으면 400). 거부할 때는 사유 코드를 짧게 로그에 남깁니다.
+// 11단계: 학생 로그인은 서버가 승인한 기기의 요청 서명(src/device-proof.mjs)까지 맞아야 자료를 다룹니다.
+// 서명은 이 함수가 실제로 받은 방법·경로(/api/notes 또는 /api/notes/<id>)·본문으로 다시 검사합니다.
 let verifyLogin;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
@@ -80,6 +83,11 @@ export default async function handler(request, response) {
     deny(response, 401, 'LOGIN_REQUIRED', 'login_not_verified', ZONES.notes);
     return;
   }
+  const supabase = createClient(projectUrl.origin, secretKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const path = id ? `/api/notes/${id}` : '/api/notes';
+  if (!await requireDevice({ request, response, login, path, supabase, zone: ZONES.notes, deny })) return;
   if (id && !UUID.test(id)) {
     deny(response, 404, 'NOTE_NOT_FOUND', 'note_id_malformed', ZONES.notes);
     return;
@@ -101,9 +109,6 @@ export default async function handler(request, response) {
   let status = 200;
   let result;
   try {
-    const supabase = createClient(projectUrl.origin, secretKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
     const notes = () => supabase.from('notes');
     const userId = login.userId;
     // 한 건 요청은 메모 ID와 소유자 ID가 모두 맞는 행만 고릅니다. 남의 메모는 0행이 되어 404입니다.

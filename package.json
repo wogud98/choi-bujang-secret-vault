@@ -11,7 +11,8 @@
     "detect:test": "node scripts/detect-test.mjs",
     "fixture:7": "node scripts/fixture-7.mjs",
     "xdr:run": "node scripts/xdr-run.mjs",
-    "policy": "node scripts/policy-restore.mjs"
+    "policy": "node scripts/policy-restore.mjs",
+    "device:test": "node scripts/device-test.mjs"
   },
   "engines": {
     "node": ">=22"

@@ -24,6 +24,27 @@
 
 `src/decider.mjs`와 `src/detect.mjs`의 로컬 시험은 반 엔진이나 운영 심판의 결과가 아닙니다. 1단계 이후 제출 묶음 계약 `aleph.defense.submission.v2`는 `scripts/bundle.mjs`에 남아 있으며, 코딩 도구가 해당 단계의 최신 배포 주소와 Git 원격을 맞춘 뒤 사용합니다.
 
+## 11단계 저장점: 나만의 접속 앱을 완성합니다
+
+- 설치형 웹앱(제작 1): `public/manifest.webmanifest`(앱 이름 「BYTE BACK 내 자료실」, 짧은 이름 「내 자료실」, 아이콘 `public/icon.svg`)과 오프라인 안내 `public/offline.html`을 붙였습니다. 서비스 워커 `public/sw.js`는 오프라인 안내·아이콘만 미리 받고, 화면이 연결되지 않을 때만 안내를 보여 줍니다. `/api` 요청과 메모 자료는 가로채거나 저장하지 않습니다. 화면에는 「기기 승인 상태」 칸이 있고, 설치된 앱으로 열렸는지는 표시만 할 뿐 기기 확인에 쓰지 않습니다. 따로 설치하는 접속 프로그램은 없습니다.
+- 기기 승인(제작 2): 「이 기기 승인 요청」을 누르면 화면이 내보낼 수 없는 P-256 기기 키를 **메모리에만** 만들고 공개키만 `POST /api/devices`로 보냅니다. 서버는 Supabase `public.devices`에 「승인 대기」로 남기기만 하고, 승인은 관리자가 SQL Editor에서 상태를 `approved`로 바꿀 때만 생깁니다(승인 버튼은 없습니다). 「승인 결과 확인」은 기기 키로 서명한 `GET /api/devices/:id`를 보내고, 서버가 승인 상태와 서명을 모두 확인해 `verified: true`라고 답한 뒤에만 자료실을 엽니다. 승인 전에는 자료 API를 부르지도 그리지도 않습니다. 기기 키와 로그인 토큰은 localStorage·sessionStorage·IndexedDB에 넣지 않으므로 화면을 새로 열면 다시 로그인하고 새 기기로 승인받습니다(승인은 12시간 뒤 끝남).
+- 요청 서명(`src/device-proof.mjs`): 학생 로그인으로 부르는 보호 요청(`/api/notes`, `/api/notices`, `/api/materials`, `/api/restore`)은 「`aleph.device.v1` · 방법 · 경로 · 본문 SHA-256 · 시각 · 기기 ID」를 기기 키로 서명해 `X-Aleph-Device`·`X-Aleph-Timestamp`·`X-Aleph-Signature` 헤더로 보냅니다. 서버는 경로와 본문을 **자기가 실제로 받은 값으로 다시 만들어** 검사하므로 서명 없는 요청(`DEVICE_SIGNATURE_REQUIRED`), 서명 뒤 경로나 본문을 바꾼 요청(`DEVICE_SIGNATURE_INVALID`), 승인 전 기기(`DEVICE_NOT_APPROVED`)는 모두 403입니다. 시각이 60초 넘게 다르면 거부합니다. 운영 심판 토큰은 반 엔진이 기기를 먼저 확인한 요청이므로 학생 기기 서명을 요구하지 않습니다. 같은 서명을 60초 안에 다시 보내는 재전송은 아직 막지 않습니다(남은 약점).
+- `aleph.config.json`: `step` 11. `judgeIssuer`·`allowedRoutes`·`restoreRoute`·판정기 `RULE_IDS`는 그대로입니다(판정기는 계약의 `deviceRegistered`만 읽고, 기기 승인 표를 읽지 않습니다). `src/attack-check.mjs`는 기기 승인 점검 세 개(토큰 없는 승인 요청·상태 확인, 서명 없는 B 토큰 `GET /api/notes`)를 먼저 보내고 10단계 점검을 그대로 보냅니다. 11단계부터 B 토큰 점검은 기기 서명이 없어 403이 정상 거부입니다.
+
+### 11단계 확인 순서
+
+1. Supabase SQL Editor에서 `devices.sql` ①을 한 번 실행하고 ⑤의 세 칸이 모두 `false`인지 봅니다.
+2. 배포 주소 `/`에서 A로 로그인 → 「기기 승인 상태: 승인 전」, 메모 목록에 「기기 승인 전에는 자료를 보여 주지 않습니다」만 보여야 합니다.
+3. 「이 기기 승인 요청」 → 기기 ID 16자리와 「승인 대기」 표시 → 「승인 결과 확인」을 눌러도 자료가 없어야 합니다.
+4. SQL Editor에서 ②로 같은 기기 ID를 찾고 ③으로 승인 → 화면에서 「승인 결과 확인」 → 「서버 확인 완료」와 기존 메모 읽기·추가·수정·삭제가 정상이어야 합니다.
+5. 로컬 연습: `npm run device:test` → 다섯 줄 통과(서명 없음·경로 변경·본문 변경·승인 대기 거부, 승인 기기 허용). 가짜 DB 연습이며 심판 판정이 아닙니다.
+
+| 순서 | 결과 (11단계 커밋 직전, 코딩 도구 환경) |
+|---|---|
+| 1 표 SQL | 미실행 (학생이 Supabase에서 실행) |
+| 2–4 화면 | 배포 주소 미실행. 가짜 API로 한 로컬 브라우저 연습에서는 승인 전 자료 API 호출 0회, 승인 뒤 목록·추가 정상, 브라우저 저장소 0건 |
+| 5 기기 서명 연습 | 통과 (가짜 DB 연습) |
+
 ## 10단계 저장점: 백업에서 자료실을 되살립니다
 
 - 안전 정책(제작 1): 1~9단계의 접근 규칙, 곧 `src/decider.mjs`의 `RULE_IDS`와 구역별 경로(`resource_zone`), `aleph.config.json`의 `allowedRoutes`, DB 접근 정책(5단계에 적용한 `public.notes` 권한 회수·RLS)을 안전 정책으로 정했습니다. 9단계 상태 그대로의 사본 `backup/safety-policy.json`(버전 `safety-policy-step9`)과 확인용 해시 `backup/safety-policy.sha256`을 만들었습니다. `npm run policy -- tamper`는 시험용 사본 `artifacts/policy-test.json`(커밋 안 함)만 만들고, 그 안의 규칙 한 줄(`zoneRoutes.notes`에 ID 없는 `GET /notes` 추가)을 일부러 바꿔 침공을 흉내 냅니다. `npm run policy -- diff`는 복원 기준 버전·해시와 바뀐 줄만 보여 줍니다. 사본이 없거나 해시가 맞지 않으면 모든 명령이 멈춥니다. 운영 정책 파일은 읽기만 하고 고치지 않습니다.

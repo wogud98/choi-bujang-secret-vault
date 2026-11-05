@@ -1,0 +1,14 @@
+{
+  "name": "BYTE BACK 내 자료실",
+  "short_name": "내 자료실",
+  "description": "가상 메모를 다루는 학습용 자료실입니다. 설치해도 서버가 승인한 기기에서만 자료가 열립니다.",
+  "lang": "ko",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#101a28",
+  "theme_color": "#101a28",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

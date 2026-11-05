@@ -152,6 +152,25 @@ async function restoreProbe(app, authorization) {
     matches: data?.matches === true && data?.ownerMatches === true
       && typeof data?.contentSha256 === 'string' && data.contentSha256 === data.snapshotSha256 };
 }
+// 11단계: 기기 승인 경로를 토큰 없이 부르고, B 토큰이 있으면 기기 서명 없는 보호 요청을 보냅니다.
+// 기기 개인키는 화면 메모리에만 있으므로 이 점검은 서명된 요청을 만들지 않습니다(경로·본문 변조는 npm run device:test 연습).
+async function deviceProbe(app, method, path, authorization) {
+  let response;
+  try {
+    response = await fetch(new URL(path, app), {
+      method, redirect: 'error', signal: AbortSignal.timeout(10000),
+      headers: { ...(authorization ? { Authorization: authorization } : {}),
+        ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}) },
+      body: method === 'POST' ? JSON.stringify({ publicKey: { kty: 'EC', crv: 'P-256', x: 'A'.repeat(43), y: 'A'.repeat(43) } }) : undefined,
+    });
+  } catch {
+    return { ran: false };
+  }
+  let data = null;
+  try { data = await response.json(); } catch { data = null; }
+  return { ran: true, status: response.status, error: typeof data?.error === 'string' ? data.error : null,
+    leaked: Array.isArray(data) && data.length > 0 };
+}
 const CROSS_NOT_RUN = '미실행: ALEPH_CHECK_TOKEN_B·ALEPH_CHECK_NOTE_A 환경변수가 없어 교차 사용자 요청을 보내지 않음';
 
 export async function runAttackChecks(config) {
@@ -162,8 +181,27 @@ export async function runAttackChecks(config) {
   // 10단계는 아래처럼 복구 경로 점검 세 개를 먼저 보낸 뒤 9단계와 같은 점검을 다시 보냅니다.
   // 9단계는 탐지 규칙(burst_read)을 src/detect.mjs에만 넣었으므로 자료실 주소 점검은 8단계와 같습니다. 폭주 조회 사건은 심판이 보냅니다.
   // 10단계는 먼저 복구 경로를 부르고(토큰 없음·위조 토큰·선택 B 토큰), 복구 직후 1~9단계 대표 점검을 그대로 다시 보냅니다.
-  if (config.step >= 4 && config.step <= 10) {
+  // 11단계는 기기 승인 점검 세 개를 먼저 보내고 10단계 점검을 그대로 보냅니다. 학생 B 토큰 요청은 기기 서명이 없으므로
+  // 11단계부터 403(DEVICE_SIGNATURE_REQUIRED)이 정상 거부입니다.
+  if (config.step >= 4 && config.step <= 11) {
     const app = appUrl(config);
+    const device = config.step >= 11;
+    const deviceChecks = [];
+    if (device) {
+      const register = await deviceProbe(app, 'POST', '/api/devices');
+      const status = await deviceProbe(app, 'GET', `/api/devices/${'0'.repeat(16)}`);
+      const tokenBForDevice = process.env.ALEPH_CHECK_TOKEN_B;
+      const unsigned = tokenBForDevice ? await deviceProbe(app, 'GET', '/api/notes', `Bearer ${tokenBForDevice}`) : { ran: false };
+      deviceChecks.push(
+        { attackId: 'device_request_anonymous', expected: '토큰 없는 POST /api/devices는 401로 거부되고 기기가 등록되지 않음',
+          observed: !register.ran ? NOT_RUN : `토큰 없는 POST /api/devices 결과 HTTP ${register.status}` },
+        { attackId: 'device_status_anonymous', expected: '토큰 없는 GET /api/devices/:id는 401로 거부됨',
+          observed: !status.ran ? NOT_RUN : `토큰 없는 GET /api/devices/:id 결과 HTTP ${status.status}` },
+        { attackId: 'device_unsigned_protected_request', expected: '기기 서명 없는 B 토큰 GET /api/notes는 403으로 거부되고 자료가 없음',
+          observed: !unsigned.ran ? (tokenBForDevice ? NOT_RUN : '미실행: ALEPH_CHECK_TOKEN_B 환경변수가 없어 서명 없는 B 토큰 요청을 보내지 않음')
+            : `서명 없는 B 토큰 GET /api/notes 결과 HTTP ${unsigned.status}${unsigned.error ? ` ${unsigned.error}` : ''}, ${unsigned.leaked ? '자료가 응답에 포함됨' : '자료 없음'}` },
+      );
+    }
     const restoreChecks = [];
     if (config.step >= 10) {
       const anon = await restoreProbe(app);
@@ -175,7 +213,9 @@ export async function runAttackChecks(config) {
           observed: !anon.ran ? NOT_RUN : `토큰 없는 POST /api/restore 결과 HTTP ${anon.status}${anon.id ? ', 복원 응답이 옴' : ', 복원 없음'}` },
         { attackId: 'restore_forged_token', expected: '서명이 맞지 않는 토큰의 POST /api/restore는 401로 거부됨',
           observed: !forged.ran ? NOT_RUN : `위조 토큰 POST /api/restore 결과 HTTP ${forged.status}${forged.id ? ', 복원 응답이 옴' : ', 복원 없음'}` },
-        { attackId: 'restore_b_target_note', expected: 'B 토큰 POST /api/restore는 200이고 복구 대상의 ID·소유자·내용 해시가 사본과 같음',
+        { attackId: 'restore_b_target_note', expected: device
+            ? '기기 서명 없는 B 토큰 POST /api/restore는 403으로 거부되고 복원하지 않음(11단계부터 승인된 기기에서만 복원)'
+            : 'B 토큰 POST /api/restore는 200이고 복구 대상의 ID·소유자·내용 해시가 사본과 같음',
           observed: !own.ran ? (tokenBForRestore ? NOT_RUN : '미실행: ALEPH_CHECK_TOKEN_B 환경변수가 없어 B 토큰 복원 요청을 보내지 않음')
             : `B 토큰 POST /api/restore 결과 HTTP ${own.status}, ID ${own.id ?? '없음'}, 동작 ${own.action ?? '없음'}, 사본과 ${own.matches ? '일치' : '불일치'}` },
       );
@@ -201,11 +241,14 @@ export async function runAttackChecks(config) {
       { attackId: 'notice_write_with_role', expected: '본문에 role을 넣은 POST /api/notices는 405로 거부됨(공지는 읽기만)',
         observed: !noticeWrite.ran ? NOT_RUN
           : `${tokenB ? 'B 토큰' : '위조 토큰'} POST /api/notices(role 포함) 결과 HTTP ${noticeWrite.status}, ${noticeWrite.leaked ? '자료가 응답에 포함됨' : '자료 없음'}` },
-      { attackId: 'student_reads_instructor_materials', expected: '강사로 저장되지 않은 B 토큰의 GET /api/materials는 403으로 거부됨',
+      { attackId: 'student_reads_instructor_materials', expected: device
+          ? '기기 서명 없는 B 토큰의 GET /api/materials는 403으로 거부됨'
+          : '강사로 저장되지 않은 B 토큰의 GET /api/materials는 403으로 거부됨',
         observed: !materialsB.ran ? (tokenB ? NOT_RUN : '미실행: ALEPH_CHECK_TOKEN_B 환경변수가 없어 B 토큰 요청을 보내지 않음')
           : `B 토큰 GET /api/materials 결과 HTTP ${materialsB.status}, ${materialsB.leaked ? '자료가 응답에 포함됨' : '자료 없음'}` },
     ];
     return [
+      ...deviceChecks,
       ...restoreChecks,
       { attackId: 'anonymous_notes_list', expected: '토큰 없는 GET /api/notes는 401로 거부되고 자료가 없음',
         observed: probeResult(list, '토큰 없는 GET /api/notes') },
@@ -218,10 +261,14 @@ export async function runAttackChecks(config) {
           ? '미실행: ALEPH_CHECK_ANON_KEY 환경변수가 없어 anon 키 직접 요청을 보내지 않음'
           : '미실행: 이 환경에서 Supabase Data API로 요청이 닿지 않음')
           : `anon 키 직접 GET /rest/v1/notes 결과 HTTP ${direct.status}, ${direct.rows ? `${direct.rows}행 보임` : '행 없음'}` },
-      { attackId: 'cross_user_note_read', expected: 'B 토큰으로 A 메모 ID를 GET하면 404로 거부되고 메모가 없음',
+      { attackId: 'cross_user_note_read', expected: device
+          ? 'B 토큰(기기 서명 없음)으로 A 메모 ID를 GET하면 403으로 거부되고 메모가 없음'
+          : 'B 토큰으로 A 메모 ID를 GET하면 404로 거부되고 메모가 없음',
         observed: !readA.ran ? (cross ? NOT_RUN : CROSS_NOT_RUN)
           : `B 토큰 GET /api/notes/<A 메모> 결과 HTTP ${readA.status}, ${readA.leaked ? 'A 메모가 응답에 포함됨' : '자료 없음'}` },
-      { attackId: 'cross_user_owner_change', expected: 'owner_id를 넣은 PUT은 400으로 거부되고 메모가 바뀌지 않음',
+      { attackId: 'cross_user_owner_change', expected: device
+          ? 'owner_id를 넣은 B 토큰 PUT(기기 서명 없음)은 403으로 거부되고 메모가 바뀌지 않음'
+          : 'owner_id를 넣은 PUT은 400으로 거부되고 메모가 바뀌지 않음',
         observed: !takeA.ran ? (cross ? NOT_RUN : CROSS_NOT_RUN)
           : `B 토큰 PUT /api/notes/<A 메모>(owner_id 포함) 결과 HTTP ${takeA.status}, ${takeA.leaked ? '메모가 응답에 포함됨' : '자료 없음'}` },
       ...zoneChecks,

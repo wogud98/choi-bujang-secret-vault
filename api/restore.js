@@ -4,6 +4,7 @@ import config from '../aleph.config.json' with { type: 'json' };
 import { createLoginVerifier } from '../src/verify-login.mjs';
 import { ZONES } from '../src/resources.mjs';
 import { deny } from '../src/api-deny.mjs';
+import { requireDevice } from '../src/device-proof.mjs';
 
 // 10단계: 비공개 가상 메모 사본(Supabase public.note_snapshots)에서 복원 대상 한 건만 되살리는 경로입니다.
 // 경로: POST /api/restore  본문은 비우거나 {"id": "<복원 대상 ID>"}만 받습니다.
@@ -12,6 +13,7 @@ import { deny } from '../src/api-deny.mjs';
 // - 대상 note_id 한 행만 고치거나(변조) 다시 넣고(삭제), 다른 메모·사본·감사 기록은 건드리지 않습니다.
 // - 사본 테이블은 service_role에도 읽기 권한만 있으므로 이 경로가 사본을 바꿀 수 없습니다.
 // 응답과 로그에는 메모 본문·토큰·사용자 ID를 넣지 않고 ID와 해시만 남깁니다.
+// 11단계: 학생 로그인은 승인된 기기의 요청 서명이 있어야 복원합니다(src/device-proof.mjs).
 export const RESTORE_TARGET_ID = 'b0000010-0000-4000-8000-00000000000b';
 
 let verifyLogin;
@@ -55,6 +57,10 @@ export default async function handler(request, response) {
     deny(response, 401, 'LOGIN_REQUIRED', 'login_not_verified', ZONES.notes);
     return;
   }
+  const supabase = createClient(projectUrl.origin, secretKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  if (!await requireDevice({ request, response, login, path: '/api/restore', supabase, zone: ZONES.notes, deny })) return;
   const input = readJson(request);
   if (!input || Array.isArray(input) || typeof input !== 'object'
       || Object.keys(input).some(key => key !== 'id')
@@ -68,9 +74,6 @@ export default async function handler(request, response) {
     return;
   }
 
-  const supabase = createClient(projectUrl.origin, secretKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
   let result;
   try {
     const { data: snapshot, error: snapshotError } = await supabase.from('note_snapshots')
