@@ -24,6 +24,35 @@
 
 `src/decider.mjs`와 `src/detect.mjs`의 로컬 시험은 반 엔진이나 운영 심판의 결과가 아닙니다. 1단계 이후 제출 묶음 계약 `aleph.defense.submission.v2`는 `scripts/bundle.mjs`에 남아 있으며, 코딩 도구가 해당 단계의 최신 배포 주소와 Git 원격을 맞춘 뒤 사용합니다.
 
+## 10단계 저장점: 백업에서 자료실을 되살립니다
+
+- 안전 정책(제작 1): 1~9단계의 접근 규칙, 곧 `src/decider.mjs`의 `RULE_IDS`와 구역별 경로(`resource_zone`), `aleph.config.json`의 `allowedRoutes`, DB 접근 정책(5단계에 적용한 `public.notes` 권한 회수·RLS)을 안전 정책으로 정했습니다. 9단계 상태 그대로의 사본 `backup/safety-policy.json`(버전 `safety-policy-step9`)과 확인용 해시 `backup/safety-policy.sha256`을 만들었습니다. `npm run policy -- tamper`는 시험용 사본 `artifacts/policy-test.json`(커밋 안 함)만 만들고, 그 안의 규칙 한 줄(`zoneRoutes.notes`에 ID 없는 `GET /notes` 추가)을 일부러 바꿔 침공을 흉내 냅니다. `npm run policy -- diff`는 복원 기준 버전·해시와 바뀐 줄만 보여 줍니다. 사본이 없거나 해시가 맞지 않으면 모든 명령이 멈춥니다. 운영 정책 파일은 읽기만 하고 고치지 않습니다.
+- 되돌리기(제작 2): `npm run policy -- restore`는 먼저 바뀔 항목과 되돌리기 전 판정을 보여 주고 끝납니다. `--yes`를 붙여야 시험 정책에서 사본과 다른 구역만 사본 값으로 되돌립니다. 사본에 없는 구역(다른 서비스 규칙)은 건드리지 않고 보존하며, 감사 기록 `artifacts/policy-audit.log`에는 줄을 덧붙이기만 합니다. 되돌린 뒤 같은 판정기 규칙으로 「B가 A 메모가 담긴 전체 목록 `GET /notes` 요청 → `deny`」, 「A가 자기 메모 한 건 `GET /notes/:id` 요청 → `allow`」를 다시 봅니다. B가 A 메모 ID 하나를 직접 읽는 요청은 판정기가 아니라 `api/notes.js`가 404로 막습니다(4단계).
+- 메모 복원(제작 3): 복원 대상은 시험 계정 B의 가상 메모 **`b0000010-0000-4000-8000-00000000000b`**(제목 「10단계 복원 대상 메모 (B)」) 한 건입니다. 서비스는 자료실 Vercel 서버 함수 `api/restore.js`, 경로는 **`POST /api/restore`**(본문은 비우거나 `{"id":"b0000010-0000-4000-8000-00000000000b"}`), `aleph.config.json`의 `restoreRoute`입니다. 비공개 사본은 Supabase `public.note_snapshots`에 있고(브라우저 쪽 역할은 권한 없음, 서버는 읽기만), 만드는 SQL은 저장소 밖에 둡니다. 로그인한 사용자 ID가 사본의 소유자와 같을 때만, 사본의 ID·소유자·내용 해시(`title` + 줄바꿈 + `content`의 SHA-256)를 다시 계산해 맞으면 그 한 행만 고치거나(변조) 다시 넣습니다(삭제). 복원 뒤 다시 읽어 ID·소유자·해시가 사본과 같은지 응답(`id`·`action`·`ownerMatches`·`contentSha256`·`snapshotSha256`·`matches`)으로 돌려줍니다. 다른 메모·사본·감사 기록은 건드리지 않고, 남의 요청·다른 ID는 404, 토큰 없음은 401, 사본 해시가 틀리면 409로 아무것도 쓰지 않습니다. 본문·토큰·사용자 ID는 응답과 로그에 넣지 않습니다.
+- `aleph.config.json`: `step` 10, `restoreRoute` `POST /api/restore`. `judgeIssuer`·`allowedRoutes`·`RULE_IDS`와 판정기 규칙은 그대로입니다(판정기에는 사본 비교용 `zoneRouteList`·`decideWithPolicy`만 더했고 `decide(request)`는 같은 표로 판정합니다). `src/attack-check.mjs`는 10단계에 복구 경로 점검 세 개를 먼저 보내고, 복구 직후 9단계와 같은 점검을 다시 보냅니다.
+
+### 10단계 복구 뒤 재시험 순서 (제작 4)
+
+결과는 실제로 실행한 것만 적습니다. 아래 표의 「미실행」은 아직 실행하지 않은 시험입니다.
+
+1. 사전 백업 다시 읽기: `npm run policy -- verify` → 「해시 일치」, 「운영 정책이 사본과 같습니다」
+2. 정책 침공·되돌리기: `npm run policy -- tamper` → `npm run policy -- restore`(바뀔 항목 확인) → `npm run policy -- restore --yes` → 「남은 차이 0개」, 두 판정 「통과」
+3. 자료 복원 사본 만들기(처음 한 번): Supabase SQL Editor에서 `notes-snapshot.sql` ①②③ → ③의 세 칸 모두 `true`
+4. B로 복구 대상 변조 또는 삭제 뒤 `POST /api/restore`(B 토큰) → 200, `matches: true`, 같은 `id`
+5. 복구 직후 1~9단계 정상 요청: 배포 주소 `/`에 A로 로그인해 메모 읽기·추가·수정·삭제, B로 로그인해 복구된 메모 보기
+6. 복구 직후 1~9단계 금지 요청: `npm run bundle`(`bundle-notes.json` 필요, B 토큰·A 메모 ID 환경변수 선택) → 토큰 없는·위조 토큰 401, anon 키 직접 요청 401, B의 A 메모 GET 404, `owner_id` PUT 400, 강사 자료 401·403, 공지 쓰기 405
+7. 판정기·탐지기 연습: `npm run decider:test`(네 줄 통과), `npm run fixture:7`(`allow`·`step_up`), `npm run detect:test`(여섯 줄 통과)
+
+| 순서 | 결과 (10단계 커밋 직전, 코딩 도구 환경) |
+|---|---|
+| 1 사전 백업 검증 | 해시 일치, 운영 정책과 같음 |
+| 2 정책 침공·되돌리기 | 되돌리기 전 B 전체 목록 `allow`(침공 흔적) → 되돌린 뒤 `deny`, A 한 건 `allow` 유지, 남은 차이 0개 |
+| 3 사본 SQL | 미실행 (학생이 Supabase에서 실행) |
+| 4 B 메모 복원 | 미실행 (배포 주소에 B 토큰 요청 안 함). 가짜 DB로 한 로컬 연습에서는 변조 `updated`·삭제 `reinserted` 모두 해시 일치 |
+| 5 정상 사용 | 미실행 |
+| 6 금지 요청 | 미실행 (이 환경에서 배포 주소로 요청이 닿지 않음) |
+| 7 판정기·탐지기 | 통과 (가상 요청 연습이며 심판 판정 아님) |
+
 ## 9단계 저장점: 도플갱어를 찾고 권한을 거둡니다
 
 - 입력 처리(제작 1): `src/detect.mjs`의 `detect(events)`는 사건마다 `at`(시각)·`method`(요청 종류)·`identity.sub`(가명 사용자) 세 값만 읽습니다. 형식이 맞지 않는 사건은 세지 않습니다. 네트워크·기기·지역 값은 만들지도 쓰지도 않고, 메모 내용·토큰·실명은 저장하거나 출력하지 않습니다.

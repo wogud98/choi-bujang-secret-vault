@@ -1,0 +1,50 @@
+{
+  "schema": "vault.safety-policy.v1",
+  "version": "safety-policy-step9",
+  "sources": [
+    "src/decider.mjs RULE_IDS·resource_zone 경로",
+    "aleph.config.json allowedRoutes",
+    "DB public.notes 권한·RLS(5단계)"
+  ],
+  "policy": {
+    "ruleIds": [
+      "device_registered",
+      "resource_zone",
+      "starter.deny",
+      "step_up_required"
+    ],
+    "zoneRoutes": {
+      "notes": [
+        "DELETE /notes/:id",
+        "GET /notes/:id",
+        "PUT /notes/:id"
+      ],
+      "notices": [
+        "GET /notices",
+        "GET /notices/:id"
+      ],
+      "materials": []
+    },
+    "allowedRoutes": [
+      "DELETE /api/notes/:id",
+      "GET /api/notes/:id",
+      "GET /api/notices",
+      "GET /api/notices/:id",
+      "PUT /api/notes/:id"
+    ],
+    "dbAccess": {
+      "public.notes": {
+        "public": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "delete",
+          "insert",
+          "select",
+          "update"
+        ],
+        "rls": true
+      }
+    }
+  }
+}

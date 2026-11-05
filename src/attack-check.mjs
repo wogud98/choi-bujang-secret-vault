@@ -132,6 +132,26 @@ async function crossUserProbe(app, method, path, token, body) {
   }
   return { ran: true, status: response.status, leaked };
 }
+// 10단계: 복구 경로 POST /api/restore를 부릅니다. B 토큰이 있을 때만 실제 복원을 요청하고,
+// 응답의 ID·소유자 일치·내용 해시 일치만 적습니다(본문·토큰은 적지 않음).
+async function restoreProbe(app, authorization) {
+  let response;
+  try {
+    response = await fetch(new URL('/api/restore', app), {
+      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(10000),
+      headers: { ...(authorization ? { Authorization: authorization } : {}), 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+  } catch {
+    return { ran: false };
+  }
+  let data = null;
+  try { data = await response.json(); } catch { data = null; }
+  return { ran: true, status: response.status, id: typeof data?.id === 'string' ? data.id : null,
+    action: typeof data?.action === 'string' ? data.action : null,
+    matches: data?.matches === true && data?.ownerMatches === true
+      && typeof data?.contentSha256 === 'string' && data.contentSha256 === data.snapshotSha256 };
+}
 const CROSS_NOT_RUN = '미실행: ALEPH_CHECK_TOKEN_B·ALEPH_CHECK_NOTE_A 환경변수가 없어 교차 사용자 요청을 보내지 않음';
 
 export async function runAttackChecks(config) {
@@ -139,9 +159,27 @@ export async function runAttackChecks(config) {
   // 6단계는 기기 조건을 판정기에만 넣었으므로 자료실 주소 점검은 5단계와 같습니다. 미등록 기기 공격은 심판이 맡습니다.
   // 7단계는 복합 이상 접속 규칙을 판정기에만 넣었으므로 자료실 주소 점검은 6단계와 같습니다. 가상 접속 사건은 심판이 보냅니다.
   // 8단계는 같은 점검에 구역 점검을 더합니다: 강사 자료를 토큰 없이·B 토큰으로 읽기, 반 공지 쓰기(본문에 role 끼워 넣기).
+  // 10단계는 아래처럼 복구 경로 점검 세 개를 먼저 보낸 뒤 9단계와 같은 점검을 다시 보냅니다.
   // 9단계는 탐지 규칙(burst_read)을 src/detect.mjs에만 넣었으므로 자료실 주소 점검은 8단계와 같습니다. 폭주 조회 사건은 심판이 보냅니다.
-  if (config.step >= 4 && config.step <= 9) {
+  // 10단계는 먼저 복구 경로를 부르고(토큰 없음·위조 토큰·선택 B 토큰), 복구 직후 1~9단계 대표 점검을 그대로 다시 보냅니다.
+  if (config.step >= 4 && config.step <= 10) {
     const app = appUrl(config);
+    const restoreChecks = [];
+    if (config.step >= 10) {
+      const anon = await restoreProbe(app);
+      const forged = await restoreProbe(app, `Bearer ${forgedToken(config)}`);
+      const tokenBForRestore = process.env.ALEPH_CHECK_TOKEN_B;
+      const own = tokenBForRestore ? await restoreProbe(app, `Bearer ${tokenBForRestore}`) : { ran: false };
+      restoreChecks.push(
+        { attackId: 'restore_anonymous', expected: '토큰 없는 POST /api/restore는 401로 거부되고 복원되지 않음',
+          observed: !anon.ran ? NOT_RUN : `토큰 없는 POST /api/restore 결과 HTTP ${anon.status}${anon.id ? ', 복원 응답이 옴' : ', 복원 없음'}` },
+        { attackId: 'restore_forged_token', expected: '서명이 맞지 않는 토큰의 POST /api/restore는 401로 거부됨',
+          observed: !forged.ran ? NOT_RUN : `위조 토큰 POST /api/restore 결과 HTTP ${forged.status}${forged.id ? ', 복원 응답이 옴' : ', 복원 없음'}` },
+        { attackId: 'restore_b_target_note', expected: 'B 토큰 POST /api/restore는 200이고 복구 대상의 ID·소유자·내용 해시가 사본과 같음',
+          observed: !own.ran ? (tokenBForRestore ? NOT_RUN : '미실행: ALEPH_CHECK_TOKEN_B 환경변수가 없어 B 토큰 복원 요청을 보내지 않음')
+            : `B 토큰 POST /api/restore 결과 HTTP ${own.status}, ID ${own.id ?? '없음'}, 동작 ${own.action ?? '없음'}, 사본과 ${own.matches ? '일치' : '불일치'}` },
+      );
+    }
     const list = await apiProbe(app, 'GET', '/api/notes');
     const one = await apiProbe(app, 'GET', `/api/notes/${PROBE_ID}`);
     const forged = await apiProbe(app, 'GET', '/api/notes', `Bearer ${forgedToken(config)}`);
@@ -168,6 +206,7 @@ export async function runAttackChecks(config) {
           : `B 토큰 GET /api/materials 결과 HTTP ${materialsB.status}, ${materialsB.leaked ? '자료가 응답에 포함됨' : '자료 없음'}` },
     ];
     return [
+      ...restoreChecks,
       { attackId: 'anonymous_notes_list', expected: '토큰 없는 GET /api/notes는 401로 거부되고 자료가 없음',
         observed: probeResult(list, '토큰 없는 GET /api/notes') },
       { attackId: 'anonymous_note_read_by_id', expected: '토큰 없는 GET /api/notes/:id는 401로 거부됨',

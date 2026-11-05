@@ -26,6 +26,28 @@ const ZONE_ROUTES = Object.freeze({
   materials: Object.freeze({}),
 });
 
+// 10단계: 안전 정책 사본(backup/safety-policy.json)과 비교·복원 연습에 쓰도록 구역별 경로 모양 목록을 내보냅니다.
+// 값만 꺼내 주며 판정에 쓰는 표는 바꾸지 않습니다.
+export function zoneRouteList() {
+  return Object.fromEntries(Object.entries(ZONE_ROUTES).map(([service, routes]) => [service, Object.keys(routes).sort()]));
+}
+
+// 10단계: 경로 모양 목록({구역: ['GET /notes/:id', ...]})을 판정용 표(경로 모양 → 실제 경로 앞부분)로 바꿉니다.
+// 'GET /notes/:id' → '/notes/', 'GET /notices' → '/notices'. 모양이 틀린 줄은 버립니다(허용으로 바꾸지 않음).
+function routesFromList(list) {
+  const table = {};
+  if (!isPlainObject(list)) return table;
+  for (const [service, routes] of Object.entries(list)) {
+    if (!Array.isArray(routes)) continue;
+    table[service] = {};
+    for (const route of routes) {
+      const match = typeof route === 'string' && /^(GET|POST|PUT|PATCH|DELETE) (\/[a-z0-9/-]*?)(\/:id)?$/u.exec(route);
+      if (match) table[service][route] = match[3] ? `${match[2]}/` : match[2];
+    }
+  }
+  return table;
+}
+
 // 엔진이 검증해 넘기는 접속 정보의 출처. 'none'은 실제 경로(접속 정보 없음),
 // 'judge_fixture'는 심판의 가상 사건입니다. 그 밖의 출처는 믿지 않습니다.
 const SIGNAL_SOURCES = Object.freeze(['none', 'judge_fixture']);
@@ -46,10 +68,10 @@ const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key
 // 요청이 어느 구역의 어느 경로인지 봅니다.
 // 'unknown': 모르는 구역 · 'denied': 아는 구역이지만 허용하지 않은 경로 · 'allowed': 허용 경로
 // route는 계약대로 '<method> <경로 모양>'이어야 하고, path는 그 모양과 깊이까지 같아야 합니다.
-function zoneOf(request) {
+function zoneOf(request, zoneRoutes = ZONE_ROUTES) {
   const service = request?.service;
-  if (typeof service !== 'string' || !hasOwn(ZONE_ROUTES, service)) return 'unknown';
-  const routes = ZONE_ROUTES[service];
+  if (typeof service !== 'string' || !hasOwn(zoneRoutes, service)) return 'unknown';
+  const routes = zoneRoutes[service];
   const route = request.route;
   if (typeof route !== 'string' || typeof request.method !== 'string'
       || !route.startsWith(`${request.method} `) || !hasOwn(routes, route)) return 'denied';
@@ -121,13 +143,23 @@ function isUnusualBurst(request) {
 }
 
 export async function decide(request) {
+  return decideWith(request, ZONE_ROUTES);
+}
+
+// 10단계: 시험 정책 사본의 구역 경로로 같은 판정을 연습합니다(scripts/policy-restore.mjs).
+// 운영 판정 decide(request)는 위의 고정 표만 씁니다. 요청에서 읽는 이름은 decide와 같습니다.
+export async function decideWithPolicy(request, zoneRouteListValue) {
+  return decideWith(request, routesFromList(zoneRouteListValue));
+}
+
+async function decideWith(request, zoneRoutes) {
   // device_registered: 등록된 기기일 때만 자료실에 들어옵니다.
   // 미등록이거나 값이 없으면(true가 아니면) 거부합니다.
   if (request?.deviceRegistered !== true) {
     return respond(request, 'deny', 'device_not_registered', 'device_registered');
   }
   // resource_zone: 구역별 정확한 경로만 통과합니다. 모르는 구역은 시작 틀의 기본 거부입니다.
-  const zone = zoneOf(request);
+  const zone = zoneOf(request, zoneRoutes);
   if (zone === 'unknown' || !hasSubject(request)) {
     return respond(request, 'deny', 'starter_not_ready', 'starter.deny');
   }
