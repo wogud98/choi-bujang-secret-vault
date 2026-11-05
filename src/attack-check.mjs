@@ -36,6 +36,11 @@ async function anonymousRead(app, path, marker) {
 }
 
 const NOT_RUN = '미실행: 이 환경에서 배포 주소로 요청이 닿지 않음';
+// 12단계: 심판 격리 환경에서는 공개 HTTPS 주소로 GET·HEAD만 보낼 수 있습니다.
+// 쓰기 요청(POST·PUT 등)이 필요한 점검은 보내지 않고 미실행으로 기록합니다.
+const READ_METHODS = new Set(['GET', 'HEAD']);
+const WRITE_SKIPPED = Object.freeze({ ran: false, write: true });
+const WRITE_NOT_RUN = '미실행: 쓰기 요청(POST·PUT)이 필요한 점검이라 보내지 않음';
 
 // 3단계: 로그인 토큰 없이(또는 서명이 맞지 않는 토큰으로) 자료 API를 부릅니다.
 // 실제 로그인 토큰은 쓰지 않으므로 정상 A 로그인 결과는 여기서 확인하지 않습니다.
@@ -48,6 +53,7 @@ function forgedToken(config) {
     iat: now, exp: now + 300 })}.${Buffer.from('not-a-real-signature').toString('base64url')}`;
 }
 async function apiProbe(app, method, path, authorization) {
+  if (!READ_METHODS.has(method)) return WRITE_SKIPPED;
   let response;
   try {
     response = await fetch(new URL(path, app), {
@@ -68,7 +74,7 @@ async function apiProbe(app, method, path, authorization) {
   }
   return { ran: true, status: response.status, leaked };
 }
-const probeResult = (probe, label) => (!probe.ran ? NOT_RUN
+const probeResult = (probe, label) => (!probe.ran ? (probe.write ? WRITE_NOT_RUN : NOT_RUN)
   : `${label} 요청 결과 HTTP ${probe.status}, ${probe.leaked ? '자료 또는 메모 ID가 응답에 포함됨' : '자료 없음'}`);
 
 // 4단계: 공개용 publishable(anon) 키로 Supabase Data API의 notes 테이블을 직접 읽어 봅니다.
@@ -113,6 +119,7 @@ async function anonDataApi(config) {
 // 토큰은 요청 헤더에만 쓰고 결과·로그에 남기지 않습니다. 남의 메모를 바꿀 수 있는 DELETE는 보내지 않고,
 // PUT은 owner_id를 끼워 넣은 본문으로 보내 서버가 DB에 닿기 전에 거부하는지만 봅니다.
 async function crossUserProbe(app, method, path, token, body) {
+  if (!READ_METHODS.has(method)) return WRITE_SKIPPED;
   let response;
   try {
     response = await fetch(new URL(path, app), {
@@ -135,6 +142,8 @@ async function crossUserProbe(app, method, path, token, body) {
 // 10단계: 복구 경로 POST /api/restore를 부릅니다. B 토큰이 있을 때만 실제 복원을 요청하고,
 // 응답의 ID·소유자 일치·내용 해시 일치만 적습니다(본문·토큰은 적지 않음).
 async function restoreProbe(app, authorization) {
+  // POST /api/restore는 쓰기 요청이므로 보내지 않습니다(아래 코드는 직접 시험할 때를 위해 남김).
+  if (!READ_METHODS.has('POST')) return WRITE_SKIPPED;
   let response;
   try {
     response = await fetch(new URL('/api/restore', app), {
@@ -155,6 +164,7 @@ async function restoreProbe(app, authorization) {
 // 11단계: 기기 승인 경로를 토큰 없이 부르고, B 토큰이 있으면 기기 서명 없는 보호 요청을 보냅니다.
 // 기기 개인키는 화면 메모리에만 있으므로 이 점검은 서명된 요청을 만들지 않습니다(경로·본문 변조는 npm run device:test 연습).
 async function deviceProbe(app, method, path, authorization) {
+  if (!READ_METHODS.has(method)) return WRITE_SKIPPED;
   let response;
   try {
     response = await fetch(new URL(path, app), {
@@ -196,7 +206,7 @@ export async function runAttackChecks(config) {
       const unsigned = tokenBForDevice ? await deviceProbe(app, 'GET', '/api/notes', `Bearer ${tokenBForDevice}`) : { ran: false };
       deviceChecks.push(
         { attackId: 'device_request_anonymous', expected: '토큰 없는 POST /api/devices는 401로 거부되고 기기가 등록되지 않음',
-          observed: !register.ran ? NOT_RUN : `토큰 없는 POST /api/devices 결과 HTTP ${register.status}` },
+          observed: !register.ran ? register.write ? WRITE_NOT_RUN : NOT_RUN : `토큰 없는 POST /api/devices 결과 HTTP ${register.status}` },
         { attackId: 'device_status_anonymous', expected: '토큰 없는 GET /api/devices/:id는 401로 거부됨',
           observed: !status.ran ? NOT_RUN : `토큰 없는 GET /api/devices/:id 결과 HTTP ${status.status}` },
         { attackId: 'device_unsigned_protected_request', expected: '기기 서명 없는 B 토큰 GET /api/notes는 403으로 거부되고 자료가 없음',
@@ -229,13 +239,13 @@ export async function runAttackChecks(config) {
       const own = tokenBForRestore ? await restoreProbe(app, `Bearer ${tokenBForRestore}`) : { ran: false };
       restoreChecks.push(
         { attackId: 'restore_anonymous', expected: '토큰 없는 POST /api/restore는 401로 거부되고 복원되지 않음',
-          observed: !anon.ran ? NOT_RUN : `토큰 없는 POST /api/restore 결과 HTTP ${anon.status}${anon.id ? ', 복원 응답이 옴' : ', 복원 없음'}` },
+          observed: !anon.ran ? anon.write ? WRITE_NOT_RUN : NOT_RUN : `토큰 없는 POST /api/restore 결과 HTTP ${anon.status}${anon.id ? ', 복원 응답이 옴' : ', 복원 없음'}` },
         { attackId: 'restore_forged_token', expected: '서명이 맞지 않는 토큰의 POST /api/restore는 401로 거부됨',
-          observed: !forged.ran ? NOT_RUN : `위조 토큰 POST /api/restore 결과 HTTP ${forged.status}${forged.id ? ', 복원 응답이 옴' : ', 복원 없음'}` },
+          observed: !forged.ran ? forged.write ? WRITE_NOT_RUN : NOT_RUN : `위조 토큰 POST /api/restore 결과 HTTP ${forged.status}${forged.id ? ', 복원 응답이 옴' : ', 복원 없음'}` },
         { attackId: 'restore_b_target_note', expected: device
             ? '기기 서명 없는 B 토큰 POST /api/restore는 403으로 거부되고 복원하지 않음(11단계부터 승인된 기기에서만 복원)'
             : 'B 토큰 POST /api/restore는 200이고 복구 대상의 ID·소유자·내용 해시가 사본과 같음',
-          observed: !own.ran ? (tokenBForRestore ? NOT_RUN : '미실행: ALEPH_CHECK_TOKEN_B 환경변수가 없어 B 토큰 복원 요청을 보내지 않음')
+          observed: !own.ran ? own.write ? WRITE_NOT_RUN : (tokenBForRestore ? NOT_RUN : '미실행: ALEPH_CHECK_TOKEN_B 환경변수가 없어 B 토큰 복원 요청을 보내지 않음')
             : `B 토큰 POST /api/restore 결과 HTTP ${own.status}, ID ${own.id ?? '없음'}, 동작 ${own.action ?? '없음'}, 사본과 ${own.matches ? '일치' : '불일치'}` },
       );
     }
@@ -258,7 +268,7 @@ export async function runAttackChecks(config) {
       { attackId: 'anonymous_instructor_materials', expected: '토큰 없는 GET /api/materials는 401로 거부되고 자료가 없음',
         observed: probeResult(materialsAnon, '토큰 없는 GET /api/materials') },
       { attackId: 'notice_write_with_role', expected: '본문에 role을 넣은 POST /api/notices는 405로 거부됨(공지는 읽기만)',
-        observed: !noticeWrite.ran ? NOT_RUN
+        observed: !noticeWrite.ran ? noticeWrite.write ? WRITE_NOT_RUN : NOT_RUN
           : `${tokenB ? 'B 토큰' : '위조 토큰'} POST /api/notices(role 포함) 결과 HTTP ${noticeWrite.status}, ${noticeWrite.leaked ? '자료가 응답에 포함됨' : '자료 없음'}` },
       { attackId: 'student_reads_instructor_materials', expected: device
           ? '기기 서명 없는 B 토큰의 GET /api/materials는 403으로 거부됨'
@@ -289,7 +299,7 @@ export async function runAttackChecks(config) {
       { attackId: 'cross_user_owner_change', expected: device
           ? 'owner_id를 넣은 B 토큰 PUT(기기 서명 없음)은 403으로 거부되고 메모가 바뀌지 않음'
           : 'owner_id를 넣은 PUT은 400으로 거부되고 메모가 바뀌지 않음',
-        observed: !takeA.ran ? (cross ? NOT_RUN : CROSS_NOT_RUN)
+        observed: !takeA.ran ? takeA.write ? WRITE_NOT_RUN : (cross ? NOT_RUN : CROSS_NOT_RUN)
           : `B 토큰 PUT /api/notes/<A 메모>(owner_id 포함) 결과 HTTP ${takeA.status}, ${takeA.leaked ? '메모가 응답에 포함됨' : '자료 없음'}` },
       ...zoneChecks,
     ];
