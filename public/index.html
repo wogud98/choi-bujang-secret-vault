@@ -626,7 +626,7 @@
         { stage: '12', kind: '금지', name: '토큰 없는 GET /api/ops', expect: [401], run: () => plain('/api/ops') },
         { stage: '12', kind: '금지', name: '기기 서명 없는 GET /api/ops', expect: [403], run: () => plain('/api/ops', { headers: auth }) },
         { stage: '12', kind: '정상', name: '승인 기기 GET /api/ops', expect: [200], run: () => signed('/api/ops') },
-        { stage: '12', kind: '금지', name: '로그아웃(회수)한 토큰으로 서명해 다시 GET /api/notes', expect: [401], revoked: true,
+        { stage: '12', kind: '금지', name: '로그아웃(회수)한 토큰으로 서명해 다시 GET /api/notes', expect: [401, 403], revoked: true,
           skip: () => '「로그아웃 뒤 같은 토큰 재전송 시험」을 눌러야 보냄 (누르면 로그아웃됨)' },
       ];
     }

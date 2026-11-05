@@ -87,6 +87,17 @@ export default async function handler(request, response) {
       response.status(502).json({ error: 'LOGOUT_REQUEST_FAILED' });
       return;
     }
+    // 12단계: 세션을 끊어도 이미 발급된 access token은 만료(exp) 전까지 서명 검사를 통과합니다.
+    // 그래서 로그아웃할 때 이 사용자의 승인·대기 기기를 모두 'revoked'로 바꿔, 옛 토큰과 옛 기기 서명으로
+    // 다시 보낸 보호 요청이 403(DEVICE_NOT_APPROVED)으로 막히게 합니다. 다른 기기도 다시 승인받아야 합니다.
+    const { error: revokeError } = await supabase.from('devices').update({ status: 'revoked' })
+      .eq('owner_id', login.userId).in('status', ['approved', 'pending']);
+    if (revokeError) {
+      console.error('logout_device_revoke_failed');
+      response.status(502).json({ error: 'LOGOUT_DEVICE_REVOKE_FAILED' });
+      return;
+    }
+    console.info('logout_devices_revoked');
   }
   response.status(204).end();
 }
