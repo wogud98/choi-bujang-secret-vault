@@ -45,6 +45,11 @@ const NOT_RUN = 'not_run';
 const READ_METHODS = new Set(['GET', 'HEAD']);
 const WRITE_SKIPPED = Object.freeze({ ran: false, write: true });
 const WRITE_NOT_RUN = NOT_RUN;
+// 12단계: 심판이 제출 묶음의 직접 점검 요청을 자기 기록에서 찾지 못해(S12_SCREEN_MISMATCH) 기본값은 요청을 보내지 않고
+// 모든 점검을 not_run으로 적습니다. 실제 HTTP 결과는 작전실 「1~12단계 실측 표」(요청 ID·확인 시각 포함)에 남깁니다.
+// 학생이 직접 확인할 때만 ALEPH_CHECK_LIVE=1을 주면 GET 점검을 실제로 보내고 받은 HTTP 상태를 적습니다.
+let liveRequests = true;
+const NOT_SENT = Object.freeze({ ran: false });
 
 // 3단계: 로그인 토큰 없이(또는 서명이 맞지 않는 토큰으로) 자료 API를 부릅니다.
 // 실제 로그인 토큰은 쓰지 않으므로 정상 A 로그인 결과는 여기서 확인하지 않습니다.
@@ -77,6 +82,7 @@ function forgedToken(config) {
     iat: now, exp: now + 300 })}.${base64url('not-a-real-signature')}`;
 }
 async function apiProbe(app, method, path, authorization) {
+  if (!liveRequests) return NOT_SENT;
   if (!READ_METHODS.has(method)) return WRITE_SKIPPED;
   let response;
   try {
@@ -111,6 +117,7 @@ function publishableKey() {
   return key && /^(?:sb_publishable_[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/u.test(key) ? key : null;
 }
 async function anonDataApi(config) {
+  if (!liveRequests) return NOT_SENT;
   const key = publishableKey();
   let target;
   try {
@@ -143,6 +150,7 @@ async function anonDataApi(config) {
 // 토큰은 요청 헤더에만 쓰고 결과·로그에 남기지 않습니다. 남의 메모를 바꿀 수 있는 DELETE는 보내지 않고,
 // PUT은 owner_id를 끼워 넣은 본문으로 보내 서버가 DB에 닿기 전에 거부하는지만 봅니다.
 async function crossUserProbe(app, method, path, token, body) {
+  if (!liveRequests) return NOT_SENT;
   if (!READ_METHODS.has(method)) return WRITE_SKIPPED;
   let response;
   try {
@@ -166,6 +174,7 @@ async function crossUserProbe(app, method, path, token, body) {
 // 10단계: 복구 경로 POST /api/restore를 부릅니다. B 토큰이 있을 때만 실제 복원을 요청하고,
 // 응답의 ID·소유자 일치·내용 해시 일치만 적습니다(본문·토큰은 적지 않음).
 async function restoreProbe(app, authorization) {
+  if (!liveRequests) return NOT_SENT;
   // POST /api/restore는 쓰기 요청이므로 보내지 않습니다(아래 코드는 직접 시험할 때를 위해 남김).
   if (!READ_METHODS.has('POST')) return WRITE_SKIPPED;
   let response;
@@ -188,6 +197,7 @@ async function restoreProbe(app, authorization) {
 // 11단계: 기기 승인 경로를 토큰 없이 부르고, B 토큰이 있으면 기기 서명 없는 보호 요청을 보냅니다.
 // 기기 개인키는 화면 메모리에만 있으므로 이 점검은 서명된 요청을 만들지 않습니다(경로·본문 변조는 npm run device:test 연습).
 async function deviceProbe(app, method, path, authorization) {
+  if (!liveRequests) return NOT_SENT;
   if (!READ_METHODS.has(method)) return WRITE_SKIPPED;
   let response;
   try {
@@ -208,6 +218,7 @@ async function deviceProbe(app, method, path, authorization) {
 const CROSS_NOT_RUN = NOT_RUN;
 
 export async function runAttackChecks(config) {
+  liveRequests = config.step < 12 || process.env.ALEPH_CHECK_LIVE === '1';
   // 5단계는 4단계 점검을 그대로 보내고, anon 키 직접 요청만 originalApiUrl로 보냅니다.
   // 6단계는 기기 조건을 판정기에만 넣었으므로 자료실 주소 점검은 5단계와 같습니다. 미등록 기기 공격은 심판이 맡습니다.
   // 7단계는 복합 이상 접속 규칙을 판정기에만 넣었으므로 자료실 주소 점검은 6단계와 같습니다. 가상 접속 사건은 심판이 보냅니다.
