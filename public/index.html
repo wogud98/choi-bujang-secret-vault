@@ -42,12 +42,28 @@
     .device .actions { display: flex; flex-wrap: wrap; gap: 8px; }
     .device.ok { border-color: #8ad8df; }
     .offline { margin: 0 0 16px; padding: 12px 16px; border: 1px solid #e0b25b; border-radius: 12px; color: #ffe9bf; background: #5a43173a; }
+    .ops h2 { margin: 0 0 6px; font-size: 22px; }
+    .ops .meta { margin: 0 0 14px; font-size: 14px; color: #8ea6c2; word-break: break-all; }
+    .ops .cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom: 14px; }
+    .ops .card { border: 1px solid #51667c; border-radius: 12px; padding: 12px 14px; background: #101a28; }
+    .ops .card h3 { margin: 0 0 6px; font-size: 16px; }
+    .ops .card p { margin: 4px 0; font-size: 14px; line-height: 1.5; }
+    .ops .tag { display: inline-block; margin-right: 4px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+    .ops .tag.live { background: #1f5f4a; color: #c9ffe9; }
+    .ops .tag.practice { background: #3d4f7a; color: #dbe6ff; }
+    .ops .tag.notrun { background: #5a4317; color: #ffe9bf; }
+    .ops .tag.bad { background: #6b2533; color: #ffe3e8; }
+    .ops .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+    .ops .table-wrap { overflow-x: auto; }
+    .ops table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 13px; }
+    .ops th, .ops td { border-bottom: 1px solid #33465c; padding: 6px 6px; text-align: left; vertical-align: top; }
+    .ops td.id { font-family: ui-monospace, monospace; font-size: 11px; word-break: break-all; }
     [hidden] { display: none !important; }
   </style>
 </head>
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 11단계 나만의 접속 앱</div>
+    <div class="eyebrow">BYTE BACK · 12단계 탈환 작전실</div>
     <h1>내 자료실</h1>
     <p>메모는 서버 API가 학습용 DB에서 읽어 옵니다. 아래 기록은 모두 실습을 위해 만든 가상 자료입니다.</p>
     <p class="offline" id="offline-banner" role="status" hidden>지금은 오프라인입니다. 이 앱은 자료를 기기에 저장하지 않으므로, 다시 연결된 뒤 로그인하고 기기 승인을 확인해야 자료가 열립니다.</p>
@@ -75,6 +91,26 @@
         <button id="device-check" type="button" hidden>승인 결과 확인</button>
       </div>
       <p class="error" id="device-error" role="alert" hidden></p>
+    </section>
+    <section class="auth ops" id="ops-panel" hidden aria-labelledby="ops-title">
+      <h2 id="ops-title">탈환 작전실</h2>
+      <p class="meta" id="ops-meta">기기 승인 뒤 서버 요약을 읽습니다.</p>
+      <p class="hint"><span class="tag live">실측</span>서버가 DB·API에서 실제로 읽은 결과 · <span class="tag practice">가상 연습</span>학생 함수에 가상 요청을 넣은 결과(심판 판정 아님) · <span class="tag notrun">미실행</span>아직 보내지 않았거나 이 자료실에서 볼 수 없는 것</p>
+      <div class="cards" id="ops-cards"></div>
+      <div class="actions">
+        <button id="ops-refresh" type="button">작전실 새로 읽기</button>
+        <button id="ops-run" type="button">1~12단계 실측 표 만들기</button>
+        <button id="ops-revoked" type="button">로그아웃 뒤 같은 토큰 재전송 시험</button>
+        <button id="ops-copy" type="button" hidden>표 Markdown 복사</button>
+      </div>
+      <p class="meta" id="ops-table-meta">아직 실측 표를 만들지 않았습니다. 아래 줄은 모두 미실행입니다.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>단계</th><th>종류</th><th>요청</th><th>기대 결과</th><th>실제 API 결과</th><th>판정</th><th>요청 ID</th><th>확인 시각</th></tr></thead>
+          <tbody id="ops-table"></tbody>
+        </table>
+      </div>
+      <p class="error" id="ops-error" role="alert" hidden></p>
     </section>
     <section class="auth" id="note-editor" hidden aria-labelledby="note-editor-title">
       <p class="status" id="note-editor-title">새 가상 메모</p>
@@ -161,6 +197,7 @@
       if (!session) {
         device = null;
         deviceVerified = false;
+        hideOps();
       }
       renderDevice(device ? 'pending' : 'none');
       loadNotes(supabaseSession);
@@ -207,7 +244,6 @@
         showError('로그아웃 실패: 로그인 서버에 연결할 수 없습니다.');
       }
     });
-    render(null);
 
     // 3단계: 메모는 로그인한 사람만 다룹니다. 로그인 세션의 access token을 Authorization 헤더로 보내고,
     // 서버가 그 토큰을 직접 검사합니다. 화면은 사용자 번호·역할·owner_id를 따로 보내지 않습니다.
@@ -259,6 +295,7 @@
     }
     function lockDevice(state, message = '') {
       deviceVerified = false;
+      hideOps();
       renderDevice(state);
       showDeviceError(message);
       noteEditor.hidden = true;
@@ -301,6 +338,7 @@
           deviceVerified = true;
           renderDevice('verified');
           await loadNotes(supabaseSession);
+          await loadOps();
         } else {
           lockDevice(data.status);
         }
@@ -418,6 +456,284 @@
       });
       return item;
     }
+    // ── 12단계 탈환 작전실 ──────────────────────────────────────────────────────
+    // 제작 1: GET /api/ops(기기 서명 필요)의 실제 응답만 그립니다. 수치는 서버가 보낸 가린 기록으로 화면에서 다시 세어
+    // 서버 수치와 같은지 표시합니다. 메모 제목·본문은 이 칸에 그리지 않습니다(서버도 보내지 않음).
+    // 제작 2: 1~12단계의 정상·금지 요청을 이 화면에서 실제로 보내고, 기대 결과·실제 HTTP 결과·요청 ID(x-vercel-id)·
+    // 확인 시각을 한 표로 남깁니다. 보내지 않은 줄은 「미실행」으로 남기고 통과로 바꾸지 않습니다.
+    const opsPanel = document.querySelector('#ops-panel');
+    const opsMeta = document.querySelector('#ops-meta');
+    const opsCards = document.querySelector('#ops-cards');
+    const opsTable = document.querySelector('#ops-table');
+    const opsTableMeta = document.querySelector('#ops-table-meta');
+    const opsRefresh = document.querySelector('#ops-refresh');
+    const opsRun = document.querySelector('#ops-run');
+    const opsRevoked = document.querySelector('#ops-revoked');
+    const opsCopy = document.querySelector('#ops-copy');
+    const opsError = document.querySelector('#ops-error');
+    let opsRows = [];
+    const el = (tag, text, className) => {
+      const node = document.createElement(tag);
+      if (text !== undefined) node.textContent = text;
+      if (className) node.className = className;
+      return node;
+    };
+    const tag = (kind) => el('span', { live: '실측', practice: '가상 연습', notrun: '미실행', bad: '불일치' }[kind], `tag ${kind}`);
+    function showOpsError(message) {
+      opsError.textContent = message;
+      opsError.hidden = !message;
+    }
+    function hideOps() {
+      opsPanel.hidden = true;
+      opsCards.replaceChildren();
+      opsRows = [];
+      renderOpsTable();
+      showOpsError('');
+    }
+    function recount(records, key, names) {
+      const counts = Object.fromEntries(names.map(name => [name, 0]));
+      for (const record of records) if (Object.hasOwn(counts, record[key])) counts[record[key]] += 1;
+      counts.total = records.length;
+      return counts;
+    }
+    const sameCounts = (a, b) => Boolean(a && b) && Object.keys(a).length === Object.keys(b).length
+      && Object.keys(a).every(key => a[key] === b[key]);
+    function card(title, kind, lines) {
+      const box = el('div', undefined, 'card');
+      const heading = el('h3');
+      heading.append(...[].concat(kind).map(tag), title);
+      box.append(heading, ...lines.map(line => el('p', line)));
+      return box;
+    }
+    function renderOps(data, responseId) {
+      const d = data.decider;
+      const practiceOk = d.practice.filter(item => item.matches).length;
+      const deciderCard = card('판정기 규칙', ['practice', 'notrun'], [
+        `RULE_IDS ${d.ruleIds.length}개: ${d.ruleIds.join(', ')}`,
+        `허용 경로: ${Object.entries(d.routes).map(([zone, routes]) => `${zone} ${routes.length}개`).join(' · ')}`,
+        `가상 요청 ${d.practice.length}건 중 기대와 같음 ${practiceOk}건, 형식 맞음 ${d.practice.filter(item => item.wellFormed).length}건`,
+        ...d.practice.map(item => `· ${item.name} → ${item.decision ?? '응답 없음'}${item.matches ? '' : ` (기대 ${item.expected})`}`),
+        `운영 엔진 실제 판정: 미실행 — ${d.live.reason}`,
+      ]);
+      const t = data.detection;
+      const detectCard = card('탐지 사건', ['practice', 'notrun'], [
+        `규칙 ${t.rule}: ${t.windowMinutes}분 안 GET ${t.limit}건 초과`,
+        ...t.practice.map(item => `· ${item.name} → ${item.action}${item.matches ? '' : ` (기대 ${item.expected})`}`),
+        `실제 사건: 미실행 — ${t.live.reason}`,
+      ]);
+      const r = data.revocation;
+      const rCounts = r.state === 'live' ? recount(r.records, 'status', ['approved', 'pending', 'revoked', 'expired', 'unknown']) : null;
+      const rMatch = sameCounts(rCounts, r.counts);
+      const revokeCard = card('회수 상태 (내 기기)', r.state !== 'live' ? 'notrun' : rMatch ? 'live' : 'bad', r.state !== 'live'
+        ? [`읽지 못함: ${r.reason}`]
+        : [`승인 ${r.counts.approved} · 대기 ${r.counts.pending} · 회수 ${r.counts.revoked} · 만료 ${r.counts.expired} (총 ${r.counts.total})`,
+          `가린 서버 기록 ${r.records.length}건으로 다시 센 수치: ${rMatch ? '일치' : '불일치'}`,
+          ...r.records.slice(0, 6).map(item => `· ${item.device} ${item.status}`)]);
+      const s = data.restore;
+      const sCounts = s.state === 'live' ? recount(s.records, 'state', ['match', 'changed', 'missing', 'bad_snapshot']) : null;
+      const sMatch = sameCounts(sCounts, s.counts);
+      const policyLine = `안전 정책 ${s.policy.version} · 해시 ${s.policy.sha256}… ${s.policy.hashCheck === 'match' ? '사본 해시와 일치'
+        : s.policy.hashCheck === 'mismatch' ? '사본 해시와 다름' : '사본 해시 미확인'} · 판정기 규칙과 ${s.policy.rulesMatchDecider ? '같음' : '다름'}`;
+      const restoreCard = card('복구 버전', s.state !== 'live' ? 'notrun' : sMatch ? 'live' : 'bad', [policyLine,
+        ...(s.state !== 'live' ? [`메모 사본: 읽지 못함 — ${s.reason}`]
+          : [`내 메모 사본 ${s.counts.total}건: 일치 ${s.counts.match} · 바뀜 ${s.counts.changed} · 없어짐 ${s.counts.missing} · 사본 손상 ${s.counts.bad_snapshot}`,
+            `가린 서버 기록 ${s.records.length}건으로 다시 센 수치: ${sMatch ? '일치' : '불일치'}`,
+            ...s.records.map(item => `· ${item.note} 사본 ${item.snapshotSha256}… / 현재 ${item.liveSha256 ?? '없음'}`)]),
+        `복구 경로: ${s.route ?? '없음'}`]);
+      opsCards.replaceChildren(deciderCard, detectCard, revokeCard, restoreCard);
+      opsMeta.textContent = `GET /api/ops 실제 응답 · 요청 ID ${data.requestId}${responseId && responseId !== data.requestId ? ` (응답 헤더 ${responseId})` : ''} · 확인 ${data.checkedAt} · 커밋 ${data.commit ? data.commit.slice(0, 12) : '알 수 없음'} · 단계 ${data.step}`;
+    }
+    async function loadOps() {
+      const token = supabaseSession?.access_token;
+      if (!token || !deviceVerified) { hideOps(); return; }
+      opsPanel.hidden = false;
+      showOpsError('');
+      opsRefresh.disabled = true;
+      try {
+        const response = await signedFetch(token, '/api/ops');
+        const data = await response.json().catch(() => null);
+        if (!response.ok || data?.schema !== 'aleph.ops.v1') throw new Error(`작전실 요약을 받지 못했습니다 (HTTP ${response.status}).`);
+        renderOps(data, response.headers.get('x-vercel-id'));
+      } catch (error) {
+        opsCards.replaceChildren();
+        opsMeta.textContent = '작전실 요약: 미실행';
+        showOpsError(error.message);
+      } finally {
+        opsRefresh.disabled = false;
+      }
+    }
+
+    // 제작 2: 실측 표에 넣을 요청 목록. expect는 허용하는 HTTP 상태, kind는 정상(허용돼야 함)·금지(거부돼야 함)입니다.
+    // 메모 본문은 표에 넣지 않고 상태·오류 코드·건수만 적습니다. 토큰·서명은 표와 복사본에 넣지 않습니다.
+    const fakeToken = () => {
+      const part = value => b64url(new TextEncoder().encode(JSON.stringify(value)));
+      return `${part({ alg: 'HS256', typ: 'JWT' })}.${part({ sub: crypto.randomUUID(), role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 300 })}.${b64url(new TextEncoder().encode('not-a-real-signature'))}`;
+    };
+    async function headersFor(key, deviceId, method, path, body) {
+      const timestamp = String(Date.now());
+      const bodySha256 = await sha256Hex(['POST', 'PUT', 'PATCH'].includes(method) ? body ?? '' : '');
+      const text = ['aleph.device.v1', method, path, bodySha256, timestamp, deviceId].join('\n');
+      const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, new TextEncoder().encode(text));
+      return { 'X-Aleph-Device': deviceId, 'X-Aleph-Timestamp': timestamp, 'X-Aleph-Signature': b64url(signature) };
+    }
+    const json = { 'Content-Type': 'application/json' };
+    function opsTests(token) {
+      const auth = { Authorization: `Bearer ${token}` };
+      const randomId = crypto.randomUUID();
+      const signed = (path, options = {}) => signedFetch(token, path, options);
+      const plain = (path, options = {}) => fetch(path, { cache: 'no-store', redirect: 'manual', ...options });
+      let ownId = null;
+      return [
+        { stage: '1~2', kind: '금지', name: '비로그인 GET /data.json (공개 정적 메모)', expect: [404], run: () => plain('/data.json') },
+        { stage: '3', kind: '금지', name: '토큰 없는 GET /api/notes', expect: [401], run: () => plain('/api/notes') },
+        { stage: '3', kind: '금지', name: '위조 토큰 GET /api/notes', expect: [401], run: () => plain('/api/notes', { headers: { Authorization: `Bearer ${fakeToken()}` } }) },
+        { stage: '3', kind: '정상', name: '내 토큰·승인 기기 GET /api/notes (목록)', expect: [200], run: async () => {
+          const response = await signed('/api/notes');
+          const data = await response.clone().json().catch(() => null);
+          ownId = Array.isArray(data) && typeof data[0]?.id === 'string' ? data[0].id : null;
+          return response;
+        } },
+        { stage: '4', kind: '정상', name: '내 메모 한 건 GET /api/notes/:id', expect: [200], skip: () => (ownId ? null : '내 메모가 없어 보내지 않음'),
+          run: () => signed(`/api/notes/${encodeURIComponent(ownId)}`) },
+        { stage: '4', kind: '금지', name: '남의(내 것이 아닌) 메모 ID GET /api/notes/:id', expect: [404], run: () => signed(`/api/notes/${randomId}`) },
+        { stage: '4', kind: '금지', name: 'owner_id를 넣은 PUT /api/notes/:id', expect: [400], run: () => signed(`/api/notes/${randomId}`,
+          { method: 'PUT', headers: json, body: JSON.stringify({ title: '점검', body: '소유자 변경 시도', owner_id: randomId }) }) },
+        { stage: '5', kind: '금지', name: 'anon 키로 Data API notes 직접 읽기', expect: [401], skip: () => '화면에는 공개 키가 없음 — 터미널 npm run bundle(ALEPH_CHECK_ANON_KEY)로 확인' },
+        { stage: '6', kind: '금지', name: '승인되지 않은 기기 키로 서명한 GET /api/notes', expect: [403], run: async () => {
+          const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign', 'verify']);
+          const jwk = await crypto.subtle.exportKey('jwk', pair.publicKey);
+          const id = (await sha256Hex(JSON.stringify({ crv: jwk.crv, kty: jwk.kty, x: jwk.x, y: jwk.y }))).slice(0, 16);
+          return plain('/api/notes', { headers: { ...auth, ...await headersFor(pair.privateKey, id, 'GET', '/api/notes') } });
+        } },
+        { stage: '7', kind: '금지', name: '복합 이상 접속의 재인증 요구(step_up)', expect: [], skip: () => '반 엔진 판정 — 작전실 「판정기 규칙」 칸의 가상 연습만 있음' },
+        { stage: '8', kind: '정상', name: '반 공지 GET /api/notices', expect: [200], run: () => signed('/api/notices') },
+        { stage: '8', kind: '금지', name: '강사 자료 GET /api/materials (강사 아님)', expect: [403], run: () => signed('/api/materials') },
+        { stage: '8', kind: '금지', name: 'role을 넣은 공지 쓰기 POST /api/notices', expect: [405], run: () => signed('/api/notices',
+          { method: 'POST', headers: json, body: JSON.stringify({ title: '점검', body: '공지 쓰기 시도', role: 'instructor' }) }) },
+        { stage: '8', kind: '금지', name: '구역 밖 경로 GET /api/notes/:id/export', expect: [404], run: () => signed(`/api/notes/${randomId}/export`) },
+        { stage: '9', kind: '금지', name: '폭주 조회(burst_read) 회수 집행', expect: [], skip: () => '반 엔진 사건 전달 미연결 — 작전실 「탐지 사건」 칸의 가상 연습만 있음' },
+        { stage: '10', kind: '정상', name: '복구 경로 POST /api/restore (B면 복원, 다른 계정은 404)', expect: [200, 404], run: () => signed('/api/restore',
+          { method: 'POST', headers: json, body: '{}' }) },
+        { stage: '11', kind: '금지', name: '기기 서명 없는 내 토큰 GET /api/notes', expect: [403], run: () => plain('/api/notes', { headers: auth }) },
+        { stage: '11', kind: '금지', name: '서명 뒤 경로를 바꾼 요청', expect: [403], run: async () => plain(`/api/notes/${randomId}`,
+          { headers: { ...auth, ...await deviceHeaders('GET', '/api/notes') } }) },
+        { stage: '11', kind: '금지', name: '서명 뒤 본문을 바꾼 PUT', expect: [403], run: async () => {
+          const signedBody = JSON.stringify({ title: '점검', body: '서명한 본문' });
+          return plain(`/api/notes/${randomId}`, { method: 'PUT', headers: { ...auth, ...json,
+            ...await deviceHeaders('PUT', `/api/notes/${randomId}`, signedBody) }, body: JSON.stringify({ title: '점검', body: '바꾼 본문' }) });
+        } },
+        { stage: '11', kind: '정상', name: '승인 기기 상태 확인 GET /api/devices/:id', expect: [200], run: () => signed(`/api/devices/${device.deviceId}`) },
+        { stage: '12', kind: '금지', name: '토큰 없는 GET /api/ops', expect: [401], run: () => plain('/api/ops') },
+        { stage: '12', kind: '금지', name: '기기 서명 없는 GET /api/ops', expect: [403], run: () => plain('/api/ops', { headers: auth }) },
+        { stage: '12', kind: '정상', name: '승인 기기 GET /api/ops', expect: [200], run: () => signed('/api/ops') },
+        { stage: '12', kind: '금지', name: '로그아웃(회수)한 토큰으로 서명해 다시 GET /api/notes', expect: [401], revoked: true,
+          skip: () => '「로그아웃 뒤 같은 토큰 재전송 시험」을 눌러야 보냄 (누르면 로그아웃됨)' },
+      ];
+    }
+    // 금지 요청 응답에 자료가 섞였는지 봅니다(본문은 읽기만 하고 표에는 건수만 적습니다).
+    async function inspect(response) {
+      const data = await response.clone().json().catch(() => null);
+      const items = Array.isArray(data) ? data.length : null;
+      const leaked = (Array.isArray(data) && data.length > 0) || typeof data?.body === 'string' || typeof data?.title === 'string';
+      return { code: typeof data?.error === 'string' ? data.error : null, items, leaked,
+        verified: data?.verified === true, action: typeof data?.action === 'string' ? data.action : null };
+    }
+    async function runOne(test) {
+      const row = { stage: test.stage, kind: test.kind, name: test.name,
+        expected: test.expect.length ? `HTTP ${test.expect.join(' 또는 ')}${test.kind === '금지' ? ', 자료 없음' : ''}` : '반 엔진 판정',
+        actual: '', verdict: '미실행', requestId: '', checkedAt: '' };
+      const skip = test.skip?.();
+      if (skip || !test.run) { row.actual = `미실행: ${skip ?? '보내지 않음'}`; return row; }
+      try {
+        const response = await test.run();
+        const info = await inspect(response);
+        row.checkedAt = new Date().toISOString();
+        row.requestId = response.headers.get('x-vercel-id') ?? '응답에 없음';
+        row.actual = `HTTP ${response.status}${info.code ? ` ${info.code}` : ''}${info.items !== null ? ` · ${info.items}건` : ''}${info.action ? ` · ${info.action}` : ''}${info.leaked && test.kind === '금지' ? ' · 자료가 응답에 포함됨' : ''}`;
+        const statusOk = test.expect.includes(response.status);
+        row.verdict = statusOk && !(test.kind === '금지' && info.leaked) ? '일치' : '불일치';
+      } catch {
+        row.checkedAt = new Date().toISOString();
+        row.actual = '미실행: 요청이 서버에 닿지 않음';
+      }
+      return row;
+    }
+    function renderOpsTable() {
+      const rows = opsRows.length ? opsRows : opsTests('').map(test => ({ stage: test.stage, kind: test.kind, name: test.name,
+        expected: test.expect.length ? `HTTP ${test.expect.join(' 또는 ')}` : '반 엔진 판정', actual: '미실행', verdict: '미실행', requestId: '', checkedAt: '' }));
+      opsTable.replaceChildren(...rows.map(row => {
+        const tr = el('tr');
+        const verdict = el('td');
+        verdict.append(tag(row.verdict === '일치' ? 'live' : row.verdict === '불일치' ? 'bad' : 'notrun'));
+        if (row.verdict === '일치') verdict.lastChild.textContent = '일치';
+        tr.append(el('td', row.stage), el('td', row.kind), el('td', row.name), el('td', row.expected), el('td', row.actual),
+          verdict, el('td', row.requestId || '-', 'id'), el('td', row.checkedAt || '-', 'id'));
+        return tr;
+      }));
+      const ran = opsRows.filter(row => row.verdict !== '미실행');
+      opsCopy.hidden = !ran.length;
+      opsTableMeta.textContent = !opsRows.length ? '아직 실측 표를 만들지 않았습니다. 아래 줄은 모두 미실행입니다.'
+        : `실측 ${ran.length}줄 (일치 ${ran.filter(row => row.verdict === '일치').length} · 불일치 ${ran.filter(row => row.verdict === '불일치').length}) · 미실행 ${opsRows.length - ran.length}줄. 심판의 41종 공격은 이 표가 아니라 포털 판정으로만 확인합니다.`;
+    }
+    opsRefresh.addEventListener('click', loadOps);
+    opsRun.addEventListener('click', async () => {
+      const token = supabaseSession?.access_token;
+      if (!token || !deviceVerified) return;
+      showOpsError('');
+      opsRun.disabled = true;
+      try {
+        const previous = new Map(opsRows.filter(row => row.verdict !== '미실행').map(row => [row.name, row]));
+        const rows = [];
+        for (const test of opsTests(token)) {
+          // 이미 실측한 회수 토큰 줄은 다시 미실행으로 덮지 않습니다.
+          rows.push(test.revoked && previous.has(test.name) ? previous.get(test.name) : await runOne(test));
+        }
+        opsRows = rows;
+        renderOpsTable();
+        await loadOps();
+      } finally {
+        opsRun.disabled = false;
+      }
+    });
+    opsRevoked.addEventListener('click', async () => {
+      const token = supabaseSession?.access_token;
+      if (!token || !deviceVerified) return;
+      if (!confirm('지금 로그아웃한 뒤 같은 토큰으로 다시 요청합니다. 끝나면 다시 로그인·기기 승인을 받아야 합니다. 계속할까요?')) return;
+      const test = opsTests(token).find(item => item.revoked);
+      const headers = await deviceHeaders('GET', '/api/notes');
+      const logout = await fetch('/api/session', { method: 'DELETE', cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }).catch(() => null);
+      const row = await runOne({ ...test, skip: () => (logout?.ok ? null : '로그아웃 요청이 성공하지 않아 보내지 않음'),
+        run: async () => {
+          // 서명 시각이 60초를 넘지 않도록 로그아웃 직후 새로 서명합니다.
+          const fresh = await deviceHeaders('GET', '/api/notes').catch(() => headers);
+          return fetch('/api/notes', { cache: 'no-store', headers: { Authorization: `Bearer ${token}`, ...fresh } });
+        } });
+      const kept = opsRows.length ? opsRows : opsTests('').map(item => ({ stage: item.stage, kind: item.kind, name: item.name,
+        expected: item.expect.length ? `HTTP ${item.expect.join(' 또는 ')}` : '반 엔진 판정', actual: '미실행', verdict: '미실행', requestId: '', checkedAt: '' }));
+      opsRows = kept.map(item => (item.name === row.name ? row : item));
+      renderOpsTable();
+      const snapshot = opsRows;
+      saveSession(null);
+      render(null);
+      opsRows = snapshot;
+      opsPanel.hidden = false;
+      opsCards.replaceChildren();
+      opsMeta.textContent = '로그아웃했습니다. 다시 로그인·기기 승인을 받으면 작전실을 다시 읽습니다. 아래 표는 복사할 수 있습니다.';
+      renderOpsTable();
+    });
+    opsCopy.addEventListener('click', async () => {
+      const lines = ['| 단계 | 종류 | 요청 | 기대 결과 | 실제 API 결과 | 판정 | 요청 ID | 확인 시각 |', '|---|---|---|---|---|---|---|---|',
+        ...opsRows.map(row => `| ${[row.stage, row.kind, row.name, row.expected, row.actual, row.verdict, row.requestId || '-', row.checkedAt || '-']
+          .map(cell => String(cell).replaceAll('|', '\\|')).join(' | ')} |`)];
+      try {
+        await navigator.clipboard.writeText(`${lines.join('\n')}\n`);
+        opsTableMeta.textContent = '표를 Markdown으로 복사했습니다. 토큰·서명·메모 본문은 들어 있지 않습니다.';
+      } catch {
+        showOpsError('복사하지 못했습니다. 브라우저의 클립보드 권한을 확인하세요.');
+      }
+    });
+    renderOpsTable();
+
     function showNotes(notes, message) {
       if (message) {
         const item = document.createElement('li');
@@ -427,6 +743,8 @@
       }
       list.replaceChildren(...notes.map(noteItem));
     }
+    // 모든 화면 요소와 함수를 준비한 뒤 처음 상태를 그립니다.
+    render(null);
   </script>
 </body>
 </html>

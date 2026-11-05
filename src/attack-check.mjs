@@ -183,7 +183,9 @@ export async function runAttackChecks(config) {
   // 10단계는 먼저 복구 경로를 부르고(토큰 없음·위조 토큰·선택 B 토큰), 복구 직후 1~9단계 대표 점검을 그대로 다시 보냅니다.
   // 11단계는 기기 승인 점검 세 개를 먼저 보내고 10단계 점검을 그대로 보냅니다. 학생 B 토큰 요청은 기기 서명이 없으므로
   // 11단계부터 403(DEVICE_SIGNATURE_REQUIRED)이 정상 거부입니다.
-  if (config.step >= 4 && config.step <= 11) {
+  // 12단계는 탈환 작전실 경로 GET /api/ops 점검(토큰 없음·위조 토큰·선택 서명 없는 B 토큰)을 먼저 보내고 11단계 점검을 그대로 보냅니다.
+  // 화면의 「1~12단계 실측 표」는 로그인·승인 기기가 필요한 정상 요청까지 보내며, 이 점검은 터미널에서 보낼 수 있는 것만 보냅니다.
+  if (config.step >= 4 && config.step <= 12) {
     const app = appUrl(config);
     const device = config.step >= 11;
     const deviceChecks = [];
@@ -200,6 +202,23 @@ export async function runAttackChecks(config) {
         { attackId: 'device_unsigned_protected_request', expected: '기기 서명 없는 B 토큰 GET /api/notes는 403으로 거부되고 자료가 없음',
           observed: !unsigned.ran ? (tokenBForDevice ? NOT_RUN : '미실행: ALEPH_CHECK_TOKEN_B 환경변수가 없어 서명 없는 B 토큰 요청을 보내지 않음')
             : `서명 없는 B 토큰 GET /api/notes 결과 HTTP ${unsigned.status}${unsigned.error ? ` ${unsigned.error}` : ''}, ${unsigned.leaked ? '자료가 응답에 포함됨' : '자료 없음'}` },
+      );
+    }
+    const opsChecks = [];
+    if (config.step >= 12) {
+      const anonOps = await deviceProbe(app, 'GET', '/api/ops');
+      const forgedOps = await deviceProbe(app, 'GET', '/api/ops', `Bearer ${forgedToken(config)}`);
+      const tokenBForOps = process.env.ALEPH_CHECK_TOKEN_B;
+      const unsignedOps = tokenBForOps ? await deviceProbe(app, 'GET', '/api/ops', `Bearer ${tokenBForOps}`) : { ran: false };
+      const opsObserved = (probe, label) => `${label} GET /api/ops 결과 HTTP ${probe.status}${probe.error ? ` ${probe.error}` : ''}`;
+      opsChecks.push(
+        { attackId: 'ops_summary_anonymous', expected: '토큰 없는 GET /api/ops는 401로 거부되고 작전실 요약이 없음',
+          observed: !anonOps.ran ? NOT_RUN : opsObserved(anonOps, '토큰 없는') },
+        { attackId: 'ops_summary_forged_token', expected: '서명이 맞지 않는 토큰의 GET /api/ops는 401로 거부됨',
+          observed: !forgedOps.ran ? NOT_RUN : opsObserved(forgedOps, '위조 토큰') },
+        { attackId: 'ops_summary_unsigned_device', expected: '기기 서명 없는 B 토큰 GET /api/ops는 403으로 거부됨',
+          observed: !unsignedOps.ran ? (tokenBForOps ? NOT_RUN : '미실행: ALEPH_CHECK_TOKEN_B 환경변수가 없어 서명 없는 B 토큰 요청을 보내지 않음')
+            : opsObserved(unsignedOps, '서명 없는 B 토큰') },
       );
     }
     const restoreChecks = [];
@@ -248,6 +267,7 @@ export async function runAttackChecks(config) {
           : `B 토큰 GET /api/materials 결과 HTTP ${materialsB.status}, ${materialsB.leaked ? '자료가 응답에 포함됨' : '자료 없음'}` },
     ];
     return [
+      ...opsChecks,
       ...deviceChecks,
       ...restoreChecks,
       { attackId: 'anonymous_notes_list', expected: '토큰 없는 GET /api/notes는 401로 거부되고 자료가 없음',

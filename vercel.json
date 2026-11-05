@@ -3,6 +3,9 @@
   "framework": null,
   "buildCommand": "npm run build",
   "outputDirectory": "public",
+  "functions": {
+    "api/ops.js": { "includeFiles": "backup/safety-policy.sha256" }
+  },
   "rewrites": [
     { "source": "/api/notes/:id", "destination": "/api/notes?id=:id" },
     { "source": "/api/notices/:id", "destination": "/api/notices?id=:id" },

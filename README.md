@@ -24,6 +24,52 @@
 
 `src/decider.mjs`와 `src/detect.mjs`의 로컬 시험은 반 엔진이나 운영 심판의 결과가 아닙니다. 1단계 이후 제출 묶음 계약 `aleph.defense.submission.v2`는 `scripts/bundle.mjs`에 남아 있으며, 코딩 도구가 해당 단계의 최신 배포 주소와 Git 원격을 맞춘 뒤 사용합니다.
 
+## 12단계 저장점: 탈환 작전실을 완성합니다
+
+이 안내의 기준은 이 저장점 커밋입니다(`git log -1`로 확인, 바로 앞 검사 커밋은 11단계 `31ee016`). 다른 커밋에서 따라 하면 결과가 다를 수 있습니다.
+
+- 탈환 작전실(제작 1): 로그인하고 기기 승인을 받으면 화면에 「탈환 작전실」 칸이 열립니다. 화면은 새 서버 함수 `GET /api/ops`(`api/ops.js`, 요약 계산은 `src/ops-summary.mjs`)의 실제 응답만 그립니다. 이 경로도 로그인 토큰과 승인된 기기의 요청 서명이 있어야 답합니다(없으면 401, 서명 없으면 403). 네 칸은 **판정기 규칙**(`RULE_IDS`·구역별 허용 경로, 학생 `decide()`에 가상 요청 7건을 넣은 결과), **탐지 사건**(`burst_read` 기준과 가상 사건 3건 결과), **회수 상태**(내 기기의 `public.devices` 기록: 승인·대기·회수·만료), **복구 버전**(안전 정책 사본 `safety-policy-step9`의 해시가 `backup/safety-policy.sha256`과 같은지, 내 메모 사본 `public.note_snapshots`와 현재 메모의 해시 비교)입니다. 각 줄에는 「실측」(서버가 DB에서 읽음)·「가상 연습」(학생 함수에 가상 입력, 심판 판정 아님)·「미실행」(운영 반 엔진의 실제 판정·사건 전달처럼 이 자료실에서 볼 수 없는 것)을 붙여 섞지 않습니다. 기기 ID·메모 ID는 앞 4자리와 끝 2자리만 보이고, 메모 제목·본문·토큰·사용자 ID는 응답에 없습니다. 서버는 수치를 가린 기록에서 세고, 화면은 같은 기록으로 다시 세어 「서버 기록으로 다시 센 수치: 일치」를 표시합니다. 맞지 않으면 「불일치」로 보입니다.
+- 실측 표(제작 2): 작전실의 「1~12단계 실측 표 만들기」를 누르면 화면이 지금 로그인·기기로 1~12단계의 정상 요청과 금지 요청 24줄을 실제로 보내고, 줄마다 기대 결과·실제 HTTP 결과(오류 코드·건수만)·요청 ID(Vercel 응답 헤더 `x-vercel-id`)·확인 시각을 남깁니다. 보내지 못하거나 이 화면에서 보낼 수 없는 줄(5단계 anon 키 직접 요청, 7단계 재인증 판정, 9단계 폭주 조회 회수)은 「미실행」으로 남고 통과로 바뀌지 않습니다. 「로그아웃 뒤 같은 토큰 재전송 시험」은 실제로 로그아웃한 뒤 같은 토큰으로 다시 보내 회수된 신원이 거부되는지 기록합니다(누르면 다시 로그인해야 합니다). 「표 Markdown 복사」로 표를 그대로 옮길 수 있고, 토큰·서명·메모 본문은 들어가지 않습니다. 심판의 41종 공격은 이 표에 없으며 포털 판정으로만 확인합니다.
+- `aleph.config.json`: `step` 12. `judgeIssuer`·`allowedRoutes`·`restoreRoute`·판정기 `RULE_IDS`는 그대로입니다. `vercel.json`은 `api/ops.js`에 해시 파일 `backup/safety-policy.sha256`만 함께 배포합니다. `src/attack-check.mjs`는 12단계에 `/api/ops` 점검 세 개(토큰 없음·위조 토큰·선택 서명 없는 B 토큰)를 먼저 보내고 11단계 점검을 그대로 보냅니다(모두 18개).
+
+### 누가 만든 것인가: 학생 몫과 제공 엔진
+
+| 부분 | 출처 | 파일 |
+|---|---|---|
+| 학생 판정기 | 학생 작업 (6~10단계) | `src/decider.mjs`, `scripts/fixture-7.mjs`의 가상 요청 |
+| 탐지 규칙 | 학생 작업 (9단계) | `src/detect.mjs` |
+| 접속 앱(설치형 웹앱·기기 승인) | 학생 작업 (11단계) | `public/index.html`, `public/manifest.webmanifest`, `public/sw.js`, `src/device-proof.mjs`, `api/devices.js` |
+| 자료실 API·작전실 | 학생 작업 (2~12단계) | `api/notes.js`, `api/notices.js`, `api/materials.js`, `api/restore.js`, `api/session.js`, `api/ops.js`, `src/ops-summary.mjs`, `src/attack-check.mjs` |
+| 판정 요청 중계·실제 판정·사건 전달·회수 집행 | **ALEPH SDP 엔진 사용** (운영 측 제공, 이 저장소에 없음) | 계약만: `docs/DECIDER_REQUEST.md`, `docs/DETECT_EVENTS.md` |
+| 로그인 검사·제출 묶음·배포 식별 | BYTE BACK 시작 틀 R5 제공 | `src/verify-login.mjs`, `scripts/bundle.mjs`, `scripts/build-public.mjs`, `scripts/deployment-identity.mjs` |
+
+비밀값은 저장소와 제출 묶음에 넣지 않습니다. Supabase 서버 전용 키(`SUPABASE_SECRET_KEY`)·주소(`SUPABASE_URL`)·강사 목록(`INSTRUCTOR_USER_IDS`)은 Vercel 프로젝트 Settings → Environment Variables에만 있습니다. `.env*`, `bundle-notes.json`, `artifacts/`는 `.gitignore`로 커밋하지 않고, 기기 개인키와 로그인 토큰은 화면 메모리에만 있습니다. 표를 만드는 SQL(`notes-snapshot.sql`, `devices.sql`)도 저장소 밖에 둡니다.
+
+### 설치·실행·중지·복구
+
+1. **설치(공통)**: Node 22 이상에서 저장소를 받고 `npm install`(또는 `npm ci`). Supabase SQL Editor에서 10단계 `notes-snapshot.sql`과 11단계 `devices.sql` ①을 한 번씩 실행합니다. Vercel 환경변수는 위 세 값을 공식 설정 화면에 직접 넣습니다.
+2. **학생 판정기**: 실행 `npm run decider:test`(네 줄 통과)·`npm run fixture:7`(`allow`·`step_up`). 실제 판정은 ALEPH SDP 엔진이 `decide(request)`를 부를 때만 일어나며 이 저장소에서 따로 켜고 끄는 프로세스는 없습니다(명령은 끝나면 멈춤). 복구는 `npm run policy -- verify` → 차이가 있으면 `npm run policy -- diff` → `npm run policy -- restore --yes`(시험 사본 기준, 운영 파일은 고치지 않음). 코드 자체를 되돌릴 때는 `git revert <커밋>`을 쓰고 `git reset --hard`는 쓰지 않습니다.
+3. **탐지 규칙**: 실행 `npm run detect:test`(여섯 줄 통과). 실제 사건 전달과 회수 집행은 ALEPH SDP 엔진 몫이라 미연결입니다. 복구는 판정기와 같이 `git revert`로 합니다.
+4. **접속 앱**: 실행은 배포 주소 `/`를 열고 로그인 → 「이 기기 승인 요청」 → SQL ③으로 승인 → 「승인 결과 확인」. 중지(한 기기의 접속을 끊기)는 SQL ④로 그 기기의 `status`를 `revoked`로 바꿉니다. 작전실 「회수 상태」에서 회수 수가 늘어야 합니다. 로컬 연습은 `npm run device:test`(다섯 줄 통과).
+5. **자료실**: 실행은 Vercel이 `main` 푸시마다 배포합니다(`npm run build`가 `public/aleph.json` 생성, 로컬 화면만 볼 때는 `npm run build -- --local`). 중지는 Vercel 프로젝트 Settings → Deployment Protection에서 Vercel Authentication을 켜 외부 접근을 막습니다. 배포 복구는 Vercel Deployments에서 앞선 정상 배포의 Instant Rollback(또는 Promote)을, 메모 복구는 B 계정·승인 기기로 `POST /api/restore`를 씁니다. 작전실 「복구 버전」이 `일치`인지 확인합니다.
+6. **작전실 연습**: `npm run ops:test`(일곱 줄 통과: 수치와 가린 기록 일치, 본문·전체 ID 미노출, 엔진 결과 미실행 유지). 가짜 기록 연습이며 심판 판정이 아닙니다.
+
+### 12단계 확인 순서
+
+1. 배포 주소 `/`에 로그인하고 기기 승인을 받으면 「탈환 작전실」이 열리고, 위쪽에 `GET /api/ops 실제 응답 · 요청 ID … · 커밋 …`이 보여야 합니다. 커밋 앞 12자리가 `git log -1`과 같아야 합니다.
+2. 「회수 상태」·「복구 버전」 칸이 「실측」이고 「다시 센 수치: 일치」여야 합니다. 판정기·탐지 칸은 「가상 연습」·「미실행」 두 표시가 함께 있어야 합니다.
+3. 「1~12단계 실측 표 만들기」 → 정상 줄은 200, 금지 줄은 401·403·404·405·400, 미실행 줄은 그대로 미실행이어야 합니다. 「불일치」가 있으면 그 줄의 요청 ID로 Vercel 로그(`api_denied zone=… reason=…`)를 찾습니다.
+4. (선택) 「로그아웃 뒤 같은 토큰 재전송 시험」 → 401이면 회수된 신원 거부. 200이면 아직 막지 못한 약점으로 남깁니다.
+5. 터미널: `git pull` → `npm run bundle` → 18개 점검 중 `/api/ops` 토큰 없음·위조 토큰이 401이어야 합니다.
+
+| 순서 | 결과 (12단계 커밋 직전, 코딩 도구 환경) |
+|---|---|
+| 1–4 배포 화면·실측 표 | 미실행 (이 환경에서 배포 주소로 요청이 닿지 않음). 가짜 API로 한 로컬 브라우저 연습에서는 작전실 네 칸 표시, 표 24줄 중 미실행 4줄 유지, 작전실 칸에 메모 본문 0건 |
+| 5 제출 묶음 | 커밋 뒤 `npm run bundle` 결과로 확인 |
+| 작전실·판정기·탐지·기기 연습 | `ops:test` 7/7, `decider:test` 4/4, `detect:test` 6/6, `device:test` 5/5 통과 (가상 연습이며 심판 판정 아님) |
+
+남은 약점: 같은 기기 서명을 60초 안에 다시 보내는 재전송은 아직 막지 않습니다(11단계와 같음). 로그아웃한 토큰이 거부되는지는 4번 실측으로만 확인합니다.
+
 ## 11단계 저장점: 나만의 접속 앱을 완성합니다
 
 - 설치형 웹앱(제작 1): `public/manifest.webmanifest`(앱 이름 「BYTE BACK 내 자료실」, 짧은 이름 「내 자료실」, 아이콘 `public/icon.svg`)과 오프라인 안내 `public/offline.html`을 붙였습니다. 서비스 워커 `public/sw.js`는 오프라인 안내·아이콘만 미리 받고, 화면이 연결되지 않을 때만 안내를 보여 줍니다. `/api` 요청과 메모 자료는 가로채거나 저장하지 않습니다. 화면에는 「기기 승인 상태」 칸이 있고, 설치된 앱으로 열렸는지는 표시만 할 뿐 기기 확인에 쓰지 않습니다. 따로 설치하는 접속 프로그램은 없습니다.
