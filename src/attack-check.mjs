@@ -35,12 +35,14 @@ async function anonymousRead(app, path, marker) {
   return { ran: true, status: response.status, visible };
 }
 
-const NOT_RUN = '미실행: 이 환경에서 배포 주소로 요청이 닿지 않음';
+// 12단계: 요청을 보내지 않았거나 응답을 받지 못한 점검은 심판 계약대로 observed를 정확히 'not_run'으로 적습니다.
+// 응답을 받은 점검에만 실제 HTTP 상태를 적고, 기대값으로 채우지 않습니다.
+const NOT_RUN = 'not_run';
 // 12단계: 심판 격리 환경에서는 공개 HTTPS 주소로 GET·HEAD만 보낼 수 있습니다.
 // 쓰기 요청(POST·PUT 등)이 필요한 점검은 보내지 않고 미실행으로 기록합니다.
 const READ_METHODS = new Set(['GET', 'HEAD']);
 const WRITE_SKIPPED = Object.freeze({ ran: false, write: true });
-const WRITE_NOT_RUN = '미실행: 쓰기 요청(POST·PUT)이 필요한 점검이라 보내지 않음';
+const WRITE_NOT_RUN = NOT_RUN;
 
 // 3단계: 로그인 토큰 없이(또는 서명이 맞지 않는 토큰으로) 자료 API를 부릅니다.
 // 실제 로그인 토큰은 쓰지 않으므로 정상 A 로그인 결과는 여기서 확인하지 않습니다.
@@ -201,7 +203,7 @@ async function deviceProbe(app, method, path, authorization) {
   return { ran: true, status: response.status, error: typeof data?.error === 'string' ? data.error : null,
     leaked: Array.isArray(data) && data.length > 0 };
 }
-const CROSS_NOT_RUN = '미실행: ALEPH_CHECK_TOKEN_B·ALEPH_CHECK_NOTE_A 환경변수가 없어 교차 사용자 요청을 보내지 않음';
+const CROSS_NOT_RUN = NOT_RUN;
 
 export async function runAttackChecks(config) {
   // 5단계는 4단계 점검을 그대로 보내고, anon 키 직접 요청만 originalApiUrl로 보냅니다.
@@ -230,7 +232,7 @@ export async function runAttackChecks(config) {
         { attackId: 'device_status_anonymous', expected: '토큰 없는 GET /api/devices/:id는 401로 거부됨',
           observed: !status.ran ? NOT_RUN : `토큰 없는 GET /api/devices/:id 결과 HTTP ${status.status}` },
         { attackId: 'device_unsigned_protected_request', expected: '기기 서명 없는 B 토큰 GET /api/notes는 403으로 거부되고 자료가 없음',
-          observed: !unsigned.ran ? (tokenBForDevice ? NOT_RUN : '미실행: ALEPH_CHECK_TOKEN_B 환경변수가 없어 서명 없는 B 토큰 요청을 보내지 않음')
+          observed: !unsigned.ran ? (tokenBForDevice ? NOT_RUN : NOT_RUN)
             : `서명 없는 B 토큰 GET /api/notes 결과 HTTP ${unsigned.status}${unsigned.error ? ` ${unsigned.error}` : ''}, ${unsigned.leaked ? '자료가 응답에 포함됨' : '자료 없음'}` },
       );
     }
@@ -247,7 +249,7 @@ export async function runAttackChecks(config) {
         { attackId: 'ops_summary_forged_token', expected: '서명이 맞지 않는 토큰의 GET /api/ops는 401로 거부됨',
           observed: !forgedOps.ran ? NOT_RUN : opsObserved(forgedOps, '위조 토큰') },
         { attackId: 'ops_summary_unsigned_device', expected: '기기 서명 없는 B 토큰 GET /api/ops는 403으로 거부됨',
-          observed: !unsignedOps.ran ? (tokenBForOps ? NOT_RUN : '미실행: ALEPH_CHECK_TOKEN_B 환경변수가 없어 서명 없는 B 토큰 요청을 보내지 않음')
+          observed: !unsignedOps.ran ? (tokenBForOps ? NOT_RUN : NOT_RUN)
             : opsObserved(unsignedOps, '서명 없는 B 토큰') },
       );
     }
@@ -265,7 +267,7 @@ export async function runAttackChecks(config) {
         { attackId: 'restore_b_target_note', expected: device
             ? '기기 서명 없는 B 토큰 POST /api/restore는 403으로 거부되고 복원하지 않음(11단계부터 승인된 기기에서만 복원)'
             : 'B 토큰 POST /api/restore는 200이고 복구 대상의 ID·소유자·내용 해시가 사본과 같음',
-          observed: !own.ran ? own.write ? WRITE_NOT_RUN : (tokenBForRestore ? NOT_RUN : '미실행: ALEPH_CHECK_TOKEN_B 환경변수가 없어 B 토큰 복원 요청을 보내지 않음')
+          observed: !own.ran ? own.write ? WRITE_NOT_RUN : (tokenBForRestore ? NOT_RUN : NOT_RUN)
             : `B 토큰 POST /api/restore 결과 HTTP ${own.status}, ID ${own.id ?? '없음'}, 동작 ${own.action ?? '없음'}, 사본과 ${own.matches ? '일치' : '불일치'}` },
       );
     }
@@ -293,7 +295,7 @@ export async function runAttackChecks(config) {
       { attackId: 'student_reads_instructor_materials', expected: device
           ? '기기 서명 없는 B 토큰의 GET /api/materials는 403으로 거부됨'
           : '강사로 저장되지 않은 B 토큰의 GET /api/materials는 403으로 거부됨',
-        observed: !materialsB.ran ? (tokenB ? NOT_RUN : '미실행: ALEPH_CHECK_TOKEN_B 환경변수가 없어 B 토큰 요청을 보내지 않음')
+        observed: !materialsB.ran ? (tokenB ? NOT_RUN : NOT_RUN)
           : `B 토큰 GET /api/materials 결과 HTTP ${materialsB.status}, ${materialsB.leaked ? '자료가 응답에 포함됨' : '자료 없음'}` },
     ];
     return [
@@ -308,8 +310,8 @@ export async function runAttackChecks(config) {
         observed: probeResult(forged, '위조 토큰 GET /api/notes') },
       { attackId: 'anon_key_direct_data_api', expected: 'anon 키로 Data API의 notes를 직접 읽으면 권한 오류로 거부되고 행이 없음',
         observed: !direct.ran ? (direct.reason === 'no_key'
-          ? '미실행: ALEPH_CHECK_ANON_KEY 환경변수가 없어 anon 키 직접 요청을 보내지 않음'
-          : '미실행: 이 환경에서 Supabase Data API로 요청이 닿지 않음')
+          ? NOT_RUN
+          : NOT_RUN)
           : `anon 키 직접 GET /rest/v1/notes 결과 HTTP ${direct.status}, ${direct.rows ? `${direct.rows}행 보임` : '행 없음'}` },
       { attackId: 'cross_user_note_read', expected: device
           ? 'B 토큰(기기 서명 없음)으로 A 메모 ID를 GET하면 403으로 거부되고 메모가 없음'
