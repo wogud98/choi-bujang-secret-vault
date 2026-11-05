@@ -24,6 +24,21 @@
 
 `src/decider.mjs`와 `src/detect.mjs`의 로컬 시험은 반 엔진이나 운영 심판의 결과가 아닙니다. 1단계 이후 제출 묶음 계약 `aleph.defense.submission.v2`는 `scripts/bundle.mjs`에 남아 있으며, 코딩 도구가 해당 단계의 최신 배포 주소와 Git 원격을 맞춘 뒤 사용합니다.
 
+## 9단계 저장점: 도플갱어를 찾고 권한을 거둡니다
+
+- 입력 처리(제작 1): `src/detect.mjs`의 `detect(events)`는 사건마다 `at`(시각)·`method`(요청 종류)·`identity.sub`(가명 사용자) 세 값만 읽습니다. 형식이 맞지 않는 사건은 세지 않습니다. 네트워크·기기·지역 값은 만들지도 쓰지도 않고, 메모 내용·토큰·실명은 저장하거나 출력하지 않습니다.
+- 탐지 규칙(제작 2) `burst_read`: 같은 `identity.sub`의 `GET` 사건이 어느 10분 구간에서든 120건을 넘으면 의심입니다. 정확히 120건은 정상이고, 다른 사용자의 사건이나 10분 밖의 사건은 합치지 않습니다. 창 계산은 `at` 시각만 씁니다.
+- 돌려주는 값(제작 3): 의심이면 `{action:"propose_revocation", reasonCode:"burst_read", subject:<그 sub>}` 세 키만, 아니면 `{action:"observe"}`만 돌려줍니다. 회수 API는 만들지 않았고 기기 권한·`src/decider.mjs`의 허용/거부 응답 형식과 `RULE_IDS`는 그대로입니다(탐지 결과는 판정기 응답이 아닙니다).
+- `aleph.config.json`: `step` 9만 바꿨고 `judgeIssuer`·`allowedRoutes`는 그대로입니다. `src/attack-check.mjs`는 9단계에도 8단계의 자료실 주소 점검을 그대로 보냅니다.
+- `npm run detect:test` 통과는 가상 사건 연습입니다. 운영 반 엔진의 사건 전달과 접속 회수는 이 저장소에 연결되어 있지 않아 미실행입니다.
+
+### 9단계 확인 순서
+
+1. `npm install`
+2. `npm run detect:test` → 여섯 줄 모두 「통과」(121건·200건 폭주만 회수 제안, 30건·120건·두 사용자 각 100건·느린 200건은 `observe`)
+3. `npm run decider:test` → 네 줄 모두 「통과」(정상 기기 유지)
+4. `npm run bundle`(`bundle-notes.json` 필요) → 8단계와 같은 거부 결과면 정상
+
 ## 8단계 저장점: 자료마다 갈 수 있는 구역을 나눕니다
 
 - 자원 ID(제작 1): `src/resources.mjs`가 구역을 `notes`(내 메모)·`notices`(강사 공지)·`materials`(강사 자료)로 나눕니다. `/api/notes` 응답의 각 메모에 `resourceId: "notes:<메모 ID>"`를 더했고(기존 `id`·`title`·`body`와 주소는 그대로), 새 `GET /api/notices`·`GET /api/notices/:id`는 가상 공지 두 건을 `resourceId: "notices:<공지 ID>"`로 돌려줍니다. 화면 메뉴는 바꾸지 않았습니다.

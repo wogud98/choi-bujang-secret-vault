@@ -139,7 +139,8 @@ export async function runAttackChecks(config) {
   // 6단계는 기기 조건을 판정기에만 넣었으므로 자료실 주소 점검은 5단계와 같습니다. 미등록 기기 공격은 심판이 맡습니다.
   // 7단계는 복합 이상 접속 규칙을 판정기에만 넣었으므로 자료실 주소 점검은 6단계와 같습니다. 가상 접속 사건은 심판이 보냅니다.
   // 8단계는 같은 점검에 구역 점검을 더합니다: 강사 자료를 토큰 없이·B 토큰으로 읽기, 반 공지 쓰기(본문에 role 끼워 넣기).
-  if (config.step >= 4 && config.step <= 8) {
+  // 9단계는 탐지 규칙(burst_read)을 src/detect.mjs에만 넣었으므로 자료실 주소 점검은 8단계와 같습니다. 폭주 조회 사건은 심판이 보냅니다.
+  if (config.step >= 4 && config.step <= 9) {
     const app = appUrl(config);
     const list = await apiProbe(app, 'GET', '/api/notes');
     const one = await apiProbe(app, 'GET', `/api/notes/${PROBE_ID}`);
