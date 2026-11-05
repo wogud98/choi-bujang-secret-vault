@@ -45,12 +45,32 @@ const WRITE_NOT_RUN = '미실행: 쓰기 요청(POST·PUT)이 필요한 점검�
 // 3단계: 로그인 토큰 없이(또는 서명이 맞지 않는 토큰으로) 자료 API를 부릅니다.
 // 실제 로그인 토큰은 쓰지 않으므로 정상 A 로그인 결과는 여기서 확인하지 않습니다.
 const PROBE_ID = '00000000-0000-4000-8000-000000000000';
+// 심판 격리 환경에는 Buffer가 없으므로 문자열을 UTF-8 바이트로 바꿔 base64url로 직접 인코딩합니다.
+const B64URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+function base64url(text) {
+  const bytes = [];
+  for (const char of text) {
+    const c = char.codePointAt(0);
+    if (c < 0x80) bytes.push(c);
+    else if (c < 0x800) bytes.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+    else if (c < 0x10000) bytes.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+    else bytes.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+  }
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const n = (bytes[i] << 16) | ((bytes[i + 1] ?? 0) << 8) | (bytes[i + 2] ?? 0);
+    out += B64URL[(n >> 18) & 63] + B64URL[(n >> 12) & 63];
+    if (i + 1 < bytes.length) out += B64URL[(n >> 6) & 63];
+    if (i + 2 < bytes.length) out += B64URL[n & 63];
+  }
+  return out;
+}
 function forgedToken(config) {
-  const part = value => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const part = value => base64url(JSON.stringify(value));
   const now = Math.floor(Date.now() / 1000);
   return `${part({ alg: 'HS256', typ: 'JWT' })}.${part({ iss: config.identityProvider?.issuer,
     aud: config.identityProvider?.audience, role: 'authenticated', sub: PROBE_ID,
-    iat: now, exp: now + 300 })}.${Buffer.from('not-a-real-signature').toString('base64url')}`;
+    iat: now, exp: now + 300 })}.${base64url('not-a-real-signature')}`;
 }
 async function apiProbe(app, method, path, authorization) {
   if (!READ_METHODS.has(method)) return WRITE_SKIPPED;
