@@ -19,7 +19,7 @@ function appUrl(config) {
 async function anonymousRead(app, path, marker) {
   let response;
   try {
-    response = await fetch(new URL(path, app), { redirect: 'error', signal: AbortSignal.timeout(10000) });
+    response = await fetch(new URL(path, app).href, { method: 'GET' });
   } catch {
     return { ran: false };
   }
@@ -39,6 +39,8 @@ async function anonymousRead(app, path, marker) {
 // 응답을 받은 점검에만 실제 HTTP 상태를 적고, 기대값으로 채우지 않습니다.
 const NOT_RUN = 'not_run';
 // 12단계: 심판 격리 환경에서는 공개 HTTPS 주소로 GET·HEAD만 보낼 수 있습니다.
+// 격리 환경의 fetch는 기본 기능만 있으므로 주소는 문자열로, 옵션은 method·headers(필요하면 body)만 넘깁니다
+// (AbortSignal.timeout·redirect 옵션을 쓰지 않음).
 // 쓰기 요청(POST·PUT 등)이 필요한 점검은 보내지 않고 미실행으로 기록합니다.
 const READ_METHODS = new Set(['GET', 'HEAD']);
 const WRITE_SKIPPED = Object.freeze({ ran: false, write: true });
@@ -78,8 +80,8 @@ async function apiProbe(app, method, path, authorization) {
   if (!READ_METHODS.has(method)) return WRITE_SKIPPED;
   let response;
   try {
-    response = await fetch(new URL(path, app), {
-      method, redirect: 'error', signal: AbortSignal.timeout(10000),
+    response = await fetch(new URL(path, app).href, {
+      method,
       headers: { ...(authorization ? { Authorization: authorization } : {}),
         ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}) },
       body: method === 'POST' ? JSON.stringify({ title: '점검', body: '비로그인 추가 시도' }) : undefined,
@@ -120,8 +122,8 @@ async function anonDataApi(config) {
   if (!target) return { ran: false };
   let response;
   try {
-    response = await fetch(target, {
-      redirect: 'error', signal: AbortSignal.timeout(10000),
+    response = await fetch(target.href, {
+      method: 'GET',
       headers: { apikey: key, Authorization: `Bearer ${key}` },
     });
   } catch {
@@ -144,8 +146,8 @@ async function crossUserProbe(app, method, path, token, body) {
   if (!READ_METHODS.has(method)) return WRITE_SKIPPED;
   let response;
   try {
-    response = await fetch(new URL(path, app), {
-      method, redirect: 'error', signal: AbortSignal.timeout(10000),
+    response = await fetch(new URL(path, app).href, {
+      method,
       headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -168,8 +170,8 @@ async function restoreProbe(app, authorization) {
   if (!READ_METHODS.has('POST')) return WRITE_SKIPPED;
   let response;
   try {
-    response = await fetch(new URL('/api/restore', app), {
-      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(10000),
+    response = await fetch(new URL('/api/restore', app).href, {
+      method: 'POST',
       headers: { ...(authorization ? { Authorization: authorization } : {}), 'Content-Type': 'application/json' },
       body: '{}',
     });
@@ -189,8 +191,8 @@ async function deviceProbe(app, method, path, authorization) {
   if (!READ_METHODS.has(method)) return WRITE_SKIPPED;
   let response;
   try {
-    response = await fetch(new URL(path, app), {
-      method, redirect: 'error', signal: AbortSignal.timeout(10000),
+    response = await fetch(new URL(path, app).href, {
+      method,
       headers: { ...(authorization ? { Authorization: authorization } : {}),
         ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}) },
       body: method === 'POST' ? JSON.stringify({ publicKey: { kty: 'EC', crv: 'P-256', x: 'A'.repeat(43), y: 'A'.repeat(43) } }) : undefined,
@@ -360,9 +362,7 @@ export async function runAttackChecks(config) {
   }
   if (config.step !== 1) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   const app = appUrl(config);
-  const response = await fetch(new URL('/data.json', app), {
-    redirect: 'error', signal: AbortSignal.timeout(10000),
-  });
+  const response = await fetch(new URL('/data.json', app).href, { method: 'GET' });
   let visible = false;
   if (response.ok) {
     try {
