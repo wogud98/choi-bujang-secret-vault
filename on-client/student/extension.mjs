@@ -156,10 +156,101 @@ function renderIdentityView(input) {
   return root;
 }
 
+// ---------- 14단계 · renderDecision 보조 함수 ----------
+// 입력: { status, mode, data?, error?, appId }, data: { appId, decision, reason, checkedAt }
+// 판정은 한국어 뜻과 원래 코드값을 함께 글자로 보여 주고, 목록에 없는 값은 확인 불가(unknown)로 처리합니다.
+// 요청 실패(error)는 서버 판정이 아니므로 거부(deny)와 다른 문구·상태로 보여 줍니다.
+
+const DECISION_TEXT = {
+  allow: {
+    text: '접근 허용',
+    note: '정책상 이 앱 접근이 허용되었습니다. 실제 앱 접속 성공을 보장하지는 않습니다.',
+  },
+  deny: {
+    text: '접근 거부',
+    note: '정책상 이 앱 접근이 거부되었습니다.',
+  },
+  challenge: {
+    text: '추가 확인 필요',
+    note: '접근 전에 추가 인증 또는 확인이 필요합니다. 이 화면은 확인 절차를 대신 수행하지 않습니다.',
+  },
+  unknown: {
+    text: '확인 불가',
+    note: '판정을 확인할 수 없습니다. 접근이 허용되지 않은 것으로 보고, 허용으로 간주하지 마세요.',
+  },
+};
+
+function formatCheckedAt(value) {
+  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return '시각 정보 없음';
+  return `${new Date(value).toLocaleString('ko-KR')} (${value})`;
+}
+
+function decisionResult(input) {
+  const data = isObject(input.data) ? input.data : {};
+  const raw = data.decision;
+  const known = Object.hasOwn(DECISION_TEXT, raw) ? raw : 'unknown';
+  const { text, note } = DECISION_TEXT[known];
+  const prefix = known === 'allow' ? '' : '주의: ';
+  const box = node('div', null, `decision decision-${known}`);
+  box.dataset.decision = known;
+  const headline = node('p', `판정: ${prefix}${text}(${known})`);
+  headline.dataset.status = known;
+  box.append(
+    headline,
+    fieldLine('대상 앱', textOr(data.appId, textOr(input.appId, 'ID 없음'))),
+    node('p', note),
+  );
+  if (known === 'unknown' && raw !== 'unknown') {
+    box.append(fieldLine('서버가 보낸 판정 값', textOr(typeof raw === 'string' ? raw : null, '값 없음')));
+  }
+  box.append(
+    fieldLine('판정 이유', textOr(data.reason, '이유 정보 없음')),
+    fieldLine('판정 시각', formatCheckedAt(data.checkedAt)),
+  );
+  return box;
+}
+
+function decisionFailure(input) {
+  const message = textOr(input.error && input.error.message, '서버가 오류 내용을 보내지 않았습니다.');
+  const box = node('div', null, 'decision decision-failed');
+  box.dataset.decision = 'request-failed';
+  box.setAttribute('role', 'alert');
+  box.append(
+    node('p', `요청 실패: ${message}`),
+    fieldLine('대상 앱', textOr(input.appId, 'ID 없음')),
+    node('p', '이것은 접근 거부(deny) 판정이 아닙니다. 판정을 받지 못했으므로 접근이 허용되지 않은 상태입니다.'),
+    node('p', '필요하면 앱을 다시 골라 직접 접속을 요청하세요.'),
+  );
+  return box;
+}
+
+function renderDecisionView(input) {
+  const safe = isObject(input) ? input : {};
+  const root = node('section', null, 'student-decision-view');
+  root.dataset.testid = 'student-decision-view';
+  root.dataset.state = typeof safe.status === 'string' ? safe.status : 'unknown';
+  root.append(node('h3', '업무 앱 접근 판정'));
+  if (safe.status === 'idle') {
+    root.append(node('p', '앱을 골라 접속을 요청하세요.', 'state state-empty'));
+    return root;
+  }
+  if (safe.status === 'loading') {
+    root.append(node('p', `판정 확인 중… (대상 앱: ${textOr(safe.appId, 'ID 없음')})`, 'state state-loading'));
+  } else if (safe.status === 'error') {
+    root.append(modeLine(safe), decisionFailure(safe));
+  } else if (safe.status === 'ok') {
+    root.append(modeLine(safe), decisionResult(safe));
+  } else {
+    root.append(node('p', '확인 불가(unknown): 알 수 없는 응답 상태입니다. 허용으로 간주하지 마세요.', 'state state-empty'));
+  }
+  root.append(node('p', '이 칸은 선택한 앱 한 개의 판정만 보여 주며, 전체 업무 앱 권한 목록이 아닙니다.', 'student-text'));
+  return root;
+}
+
 export function createStudentView() {
   return {
     renderIdentity(input) { return renderIdentityView(input); },
-    renderDecision() { return '학생 구현 대기: 서버의 판정과 이유를 연결하세요.'; },
+    renderDecision(input) { return renderDecisionView(input); },
     renderEvents() { return '학생 구현 대기: 본인 접속·XDR 기록을 연결하세요.'; },
     renderStatus() { return '학생 구현 대기: 기기·세션·알림과 연결 점검 상태를 구분하세요.'; },
     renderVulnerabilities() { return '학생 구현 대기: 정확한 설치 버전·OSV 출처·조회 시각·부분 결과·조회 실패를 구분하세요.'; },
