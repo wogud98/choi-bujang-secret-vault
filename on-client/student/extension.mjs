@@ -2,7 +2,7 @@
 // 제공 UI를 받은 것만으로 단계 완료를 인정하지 않습니다.
 
 // ---------- 13단계 · renderIdentity 보조 함수 ----------
-// 화면은 document.createElement 와 textContent 로만 만듭니다(innerHTML 사용 안 함).
+// 화면은 document.createElement 와 textContent 로만 만들고, HTML 문자열은 넣지 않습니다.
 // renderIdentity 는 부를 때마다 입력값만으로 새 요소를 만들어 돌려줍니다.
 // 이전 사용자·기기·세션 값을 모듈 변수에 저장하지 않으므로, 다시 불러오기로 새 입력이 오면
 // 제공 UI가 학생 칸을 새 요소로 교체하고, 오류 입력에서는 옛 사용자 이름이 남지 않습니다.
