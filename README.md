@@ -191,6 +191,13 @@
 
 - 참고: `npm run fixture:7`(7단계 연습)은 복합 이상 요청에 `step_up`을 기대하므로 6단계에서는 실패하는 것이 정상이었습니다(7단계에서 통과).
 
+## 보너스 xdr-04 저장점: 몰래 심어진 프로그램 탐지
+
+- 작동: `xdr/persistence/decide.mjs`가 Wazuh 모양 연습 경보 하나를 받아 `block`·`alert`·`record`와 확신도, 근거 패턴 이름을 돌려줍니다. 패턴은 MITRE ATT&CK T1543(서비스)·T1053(예약 작업)·T1547.001(시작 폴더) 근거의 일곱 가지(수준 5 이상의 서비스·예약 작업 변경, 서명 없는 새 서비스, 평소 목록에 없는 항목, 임시 폴더 실행 파일, 시작 폴더 변경, 서비스와 예약 작업 동시, 서명을 모르거나 등록·실행이 이어지지 않은 변경은 최대 확신도 0.8로 차단하지 않음)이고, `patterns.json`과 파일 맨 위 상수가 같습니다. `decide.mjs`에는 `import`가 없고 파일 읽기·쓰기·네트워크도 없습니다.
+- 알림과 격리: `xdr/persistence/respond.mjs`가 `alert`·`block`을 공용 `xdr/alerts.log`에 한 줄씩 쌓고(같은 경보는 한 번만), `block`이 나온 PC 주소만 근거 경보 번호와 24시간 만료 시각을 붙여 `xdr/persistence/deny-rules.json`에 거부 규칙 7개로 둡니다. 정상 사건이 나온 주소는 규칙에 넣지 않습니다.
+- 판정기 연결: xdr-01–03과 같이 `src/decider.mjs`의 기존 규칙은 고치지 않았습니다. 거부 규칙은 운영 엔진이 출발 주소를 계약으로 넘겨줄 때 `isBlocked()` 확인 단계로 꽂습니다.
+- 다시 실행: `npm run xdr:run -- persistence`(→ `xdr/persistence/result.json`, block 8 / alert 8 / record 8), `node xdr/persistence/respond.mjs`(알림·거부 규칙·다시 흘리기 결과), `node xdr/persistence/read-alerts.mjs`(경보 확인용 목록). 로컬 결과는 연습 경보 기준이며 심판 판정이 아닙니다.
+
 ## 보너스 xdr-03 저장점: 알려진 취약점 악용 탐지
 
 - 작동: `xdr/known-cve/decide.mjs`가 Wazuh 모양 연습 경보 하나를 받아 `block`·`alert`·`record`와 확신도, 근거 패턴 이름을 돌려줍니다. 패턴은 CVE-2021-44228(Log4Shell)·MITRE ATT&CK T1190 근거의 네 가지(머리글의 원격 조회 구문, 주소 인자의 원격 조회 구문, 구문과 함께 나온 점검 도구 흔적, 구문 없는 T1190 표시는 최대 확신도 0.8로 차단하지 않음)이고, `patterns.json`과 파일 맨 위 상수가 같습니다. `decide.mjs`에는 `import`가 없고 파일 읽기·쓰기·네트워크도 없습니다. 조회 구문은 글자로만 비교하고 따라가지 않습니다.

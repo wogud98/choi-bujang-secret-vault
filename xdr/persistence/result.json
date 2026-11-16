@@ -1,0 +1,155 @@
+{
+  "schema": "aleph.xdr.result.v1",
+  "moduleKey": "persistence",
+  "decisions": [
+    {
+      "alertId": "ps-01",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "persistence_change, unsigned_new_service, temp_folder_executable (T1543, T1543.003)"
+    },
+    {
+      "alertId": "ps-02",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "persistence_change, unfamiliar_persistence_item, temp_folder_executable (T1053)"
+    },
+    {
+      "alertId": "ps-03",
+      "action": "block",
+      "confidence": 0.93,
+      "reason": "persistence_change, unfamiliar_persistence_item, startup_folder_change (T1543, T1547.001)"
+    },
+    {
+      "alertId": "ps-04",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "persistence_change, unsigned_new_service (T1543, T1543.003)"
+    },
+    {
+      "alertId": "ps-05",
+      "action": "block",
+      "confidence": 0.91,
+      "reason": "persistence_change, unfamiliar_persistence_item, temp_folder_executable (T1053)"
+    },
+    {
+      "alertId": "ps-06",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "persistence_change, unsigned_new_service, temp_folder_executable (T1543, T1543.003)"
+    },
+    {
+      "alertId": "ps-07",
+      "action": "block",
+      "confidence": 0.93,
+      "reason": "persistence_change, temp_folder_executable, startup_folder_change, service_and_task_together (T1543, T1053, T1547.001)"
+    },
+    {
+      "alertId": "ps-08",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "persistence_change, unfamiliar_persistence_item, temp_folder_executable (T1543)"
+    },
+    {
+      "alertId": "ps-09",
+      "action": "alert",
+      "confidence": 0.52,
+      "reason": "persistence_change, persistence_unconfirmed (T1053)"
+    },
+    {
+      "alertId": "ps-10",
+      "action": "alert",
+      "confidence": 0.64,
+      "reason": "persistence_change, startup_folder_change, persistence_unconfirmed (T1543, T1547.001)"
+    },
+    {
+      "alertId": "ps-11",
+      "action": "alert",
+      "confidence": 0.5,
+      "reason": "persistence_change (T1543)"
+    },
+    {
+      "alertId": "ps-12",
+      "action": "alert",
+      "confidence": 0.52,
+      "reason": "persistence_change (T1053)"
+    },
+    {
+      "alertId": "ps-13",
+      "action": "alert",
+      "confidence": 0.66,
+      "reason": "persistence_change, temp_folder_executable, persistence_unconfirmed (T1543)"
+    },
+    {
+      "alertId": "ps-14",
+      "action": "alert",
+      "confidence": 0.62,
+      "reason": "persistence_change, startup_folder_change, persistence_unconfirmed (T1543, T1547.001)"
+    },
+    {
+      "alertId": "ps-15",
+      "action": "alert",
+      "confidence": 0.54,
+      "reason": "persistence_change (T1053)"
+    },
+    {
+      "alertId": "ps-16",
+      "action": "alert",
+      "confidence": 0.5,
+      "reason": "persistence_change (T1543)"
+    },
+    {
+      "alertId": "ps-17",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    },
+    {
+      "alertId": "ps-18",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    },
+    {
+      "alertId": "ps-19",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    },
+    {
+      "alertId": "ps-20",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    },
+    {
+      "alertId": "ps-21",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    },
+    {
+      "alertId": "ps-22",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    },
+    {
+      "alertId": "ps-23",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    },
+    {
+      "alertId": "ps-24",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    }
+  ],
+  "counts": {
+    "block": 8,
+    "alert": 8,
+    "record": 8
+  }
+}
