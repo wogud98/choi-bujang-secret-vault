@@ -1,0 +1,53 @@
+{
+  "schema": "aleph.xdr.patterns.v1",
+  "moduleKey": "known-cve",
+  "source": "CVE-2021-44228 (https://nvd.nist.gov/vuln/detail/CVE-2021-44228), MITRE ATT&CK T1190 Exploit Public-Facing Application (https://attack.mitre.org/techniques/T1190/)",
+  "patterns": [
+    {
+      "name": "jndi_lookup_in_header",
+      "technique": "T1190",
+      "condition": {
+        "fields": ["useragent", "referer", "x_forwarded_for"],
+        "lookupRegex": "\\$\\{\\s*jndi\\s*:\\s*(ldaps?|rmi|dns|iiop|nis|nds|corba|https?)\\s*://",
+        "baseConfidence": 0.7,
+        "clearLevel": 12,
+        "repeatAtLeast": 3
+      },
+      "evidence": "CVE-2021-44228·T1190: 요청 머리글(User-Agent 등)에 ${jndi:ldap://…} 원격 조회 구문을 넣어, 머리글을 기록하는 Log4j 가 외부 코드를 내려받게 하는 알려진 악용 형태입니다."
+    },
+    {
+      "name": "jndi_lookup_in_argument",
+      "technique": "T1190",
+      "condition": {
+        "fields": ["url"],
+        "lookupRegex": "\\$\\{\\s*jndi\\s*:\\s*(ldaps?|rmi|dns|iiop|nis|nds|corba|https?)\\s*://",
+        "baseConfidence": 0.7,
+        "clearLevel": 12,
+        "repeatAtLeast": 3
+      },
+      "evidence": "CVE-2021-44228·T1190: 주소 인자(검색어·next 등)에 ${jndi:…} 원격 조회 구문을 넣어, 인자를 기록하는 Log4j 가 공격자 서버에 조회하게 하는 알려진 악용 형태입니다."
+    },
+    {
+      "name": "known_scanner_trace",
+      "technique": "T1190",
+      "condition": {
+        "descriptionHas": ["취약점 점검 흔적"],
+        "onlyWithLookup": true,
+        "bonus": 0.05
+      },
+      "evidence": "T1190: CVE-2021-44228 공개 직후 자동 점검 도구가 같은 조회 구문을 대량으로 뿌렸으므로, 점검 도구 흔적은 원격 조회 구문과 함께 나올 때만 확신도를 올립니다."
+    },
+    {
+      "name": "cve_marker_without_lookup",
+      "technique": "T1190",
+      "condition": {
+        "mitre": "T1190",
+        "noLookup": true,
+        "baseConfidence": 0.5,
+        "clearLevel": 12,
+        "maxConfidence": 0.8
+      },
+      "evidence": "T1190 탐지(웹 요청 로그 확인): T1190 경보지만 완전한 ${jndi:…://} 구문이 없으면 취약점 이름 검색·문서 열람·잘린 글자일 수 있어 막지 않고 사람 확인으로 넘깁니다."
+    }
+  ]
+}

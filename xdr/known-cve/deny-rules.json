@@ -1,0 +1,84 @@
+{
+  "schema": "aleph.xdr.deny-rules.v1",
+  "moduleKey": "known-cve",
+  "rules": [
+    {
+      "ruleId": "xdr.known_cve.deny.203.0.113.10",
+      "kind": "deny_source",
+      "srcip": "203.0.113.10",
+      "reason": "jndi_lookup_in_header (CVE-2021-44228, T1190)",
+      "startsAt": "2026-09-27T00:14:02.000Z",
+      "expiresAt": "2026-09-27T01:14:18.000Z",
+      "evidenceAlertIds": [
+        "kc-01",
+        "kc-02"
+      ]
+    },
+    {
+      "ruleId": "xdr.known_cve.deny.198.51.100.16",
+      "kind": "deny_source",
+      "srcip": "198.51.100.16",
+      "reason": "jndi_lookup_in_argument (CVE-2021-44228, T1190)",
+      "startsAt": "2026-09-27T00:17:06.000Z",
+      "expiresAt": "2026-09-27T01:17:06.000Z",
+      "evidenceAlertIds": [
+        "kc-03"
+      ]
+    },
+    {
+      "ruleId": "xdr.known_cve.deny.192.0.2.16",
+      "kind": "deny_source",
+      "srcip": "192.0.2.16",
+      "reason": "jndi_lookup_in_header (CVE-2021-44228, T1190)",
+      "startsAt": "2026-09-27T01:04:22.000Z",
+      "expiresAt": "2026-09-27T02:04:22.000Z",
+      "evidenceAlertIds": [
+        "kc-04"
+      ]
+    },
+    {
+      "ruleId": "xdr.known_cve.deny.203.0.113.24",
+      "kind": "deny_source",
+      "srcip": "203.0.113.24",
+      "reason": "jndi_lookup_in_argument, known_scanner_trace (CVE-2021-44228, T1190)",
+      "startsAt": "2026-09-27T01:21:09.000Z",
+      "expiresAt": "2026-09-27T02:21:09.000Z",
+      "evidenceAlertIds": [
+        "kc-05"
+      ]
+    },
+    {
+      "ruleId": "xdr.known_cve.deny.198.51.100.24",
+      "kind": "deny_source",
+      "srcip": "198.51.100.24",
+      "reason": "jndi_lookup_in_argument (CVE-2021-44228, T1190)",
+      "startsAt": "2026-09-27T02:08:41.000Z",
+      "expiresAt": "2026-09-27T03:08:41.000Z",
+      "evidenceAlertIds": [
+        "kc-06"
+      ]
+    },
+    {
+      "ruleId": "xdr.known_cve.deny.192.0.2.24",
+      "kind": "deny_source",
+      "srcip": "192.0.2.24",
+      "reason": "jndi_lookup_in_header (CVE-2021-44228, T1190)",
+      "startsAt": "2026-09-27T04:06:15.000Z",
+      "expiresAt": "2026-09-27T05:06:15.000Z",
+      "evidenceAlertIds": [
+        "kc-07"
+      ]
+    },
+    {
+      "ruleId": "xdr.known_cve.deny.203.0.113.31",
+      "kind": "deny_source",
+      "srcip": "203.0.113.31",
+      "reason": "jndi_lookup_in_header, jndi_lookup_in_argument (CVE-2021-44228, T1190)",
+      "startsAt": "2026-09-27T05:19:03.000Z",
+      "expiresAt": "2026-09-27T06:19:03.000Z",
+      "evidenceAlertIds": [
+        "kc-08"
+      ]
+    }
+  ]
+}
