@@ -191,6 +191,13 @@
 
 - 참고: `npm run fixture:7`(7단계 연습)은 복합 이상 요청에 `step_up`을 기대하므로 6단계에서는 실패하는 것이 정상이었습니다(7단계에서 통과).
 
+## 보너스 xdr-06 저장점: 자료 빼돌리기 탐지
+
+- 작동: `xdr/exfiltration/decide.mjs`가 Wazuh 모양 연습 경보 하나를 받아 `block`·`alert`·`record`와 확신도, 근거 패턴 이름을 돌려줍니다. 패턴은 MITRE ATT&CK T1041(명령 통로로 유출)·T1048(다른 프로토콜로 유출) 근거의 여섯 가지(수준 5 이상의 외부 전송, 50MB 이상 대용량 전송, 처음 보는 목적지, 자료 수십 건·반복 전송, 업무 시간 밖·압축 파일 반출, 50MB 미만이거나 실패한 전송은 최대 확신도 0.8로 차단하지 않음)이고, `patterns.json`과 파일 맨 위 상수가 같습니다. `decide.mjs`에는 `import`가 없고 파일 읽기·쓰기·네트워크도 없습니다.
+- 알림과 차단: `xdr/exfiltration/respond.mjs`가 `alert`·`block`을 공용 `xdr/alerts.log`에 한 줄씩 쌓고(같은 경보는 한 번만), `block`이 나온 **목적지 주소**만 근거 경보 번호와 24시간 만료 시각을 붙여 `xdr/exfiltration/deny-rules.json`에 거부 규칙 8개로 둡니다. 사람(출발 주소·계정)은 막지 않고, 평소 목적지(자료실·수업 자료 주소)와 정상 사건이 간 목적지는 규칙에 넣지 않습니다.
+- 판정기 연결: xdr-01–04와 같이 `src/decider.mjs`의 기존 규칙은 고치지 않았습니다. 거부 규칙은 운영 엔진이 목적지 주소를 계약으로 넘겨줄 때 `isBlocked()` 확인 단계로 꽂습니다.
+- 다시 실행: `npm run xdr:run -- exfiltration`(→ `xdr/exfiltration/result.json`, block 10 / alert 10 / record 10), `node xdr/exfiltration/respond.mjs`(알림·거부 규칙·다시 흘리기 결과), `node xdr/exfiltration/read-alerts.mjs`(경보 확인용 목록). 로컬 결과는 연습 경보 기준이며 심판 판정이 아닙니다.
+
 ## 보너스 xdr-05 저장점: 권한 가로채기 탐지
 
 - 작동: `xdr/privilege/decide.mjs`가 Wazuh 모양 연습 경보 하나를 받아 `block`·`alert`·`record`와 확신도, 근거 패턴 이름을 돌려줍니다. 패턴은 MITRE ATT&CK T1068(권한 상승 악용)·T1078(정상 계정 도용) 근거의 다섯 가지(수준 5 이상의 권한 경보, 관리자 그룹 추가, 처음 보는 관리자 명령, 업무 시간 밖 권한 사용, 취소·실패했거나 관리자 그룹이 아니거나 평소 주소의 한 번짜리 사용은 최대 확신도 0.8로 차단하지 않음)이고, `patterns.json`과 파일 맨 위 상수가 같습니다. `decide.mjs`에는 `import`가 없고 파일 읽기·쓰기·네트워크도 없습니다.

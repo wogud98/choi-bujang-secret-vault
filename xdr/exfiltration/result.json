@@ -1,0 +1,191 @@
+{
+  "schema": "aleph.xdr.result.v1",
+  "moduleKey": "exfiltration",
+  "decisions": [
+    {
+      "alertId": "ex-01",
+      "action": "block",
+      "confidence": 1,
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, bulk_or_repeated_transfer (T1048)"
+    },
+    {
+      "alertId": "ex-02",
+      "action": "block",
+      "confidence": 1,
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, off_hours_archive_export (T1048)"
+    },
+    {
+      "alertId": "ex-03",
+      "action": "block",
+      "confidence": 0.98,
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, bulk_or_repeated_transfer (T1041)"
+    },
+    {
+      "alertId": "ex-04",
+      "action": "block",
+      "confidence": 1,
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, bulk_or_repeated_transfer (T1048)"
+    },
+    {
+      "alertId": "ex-05",
+      "action": "block",
+      "confidence": 0.96,
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, bulk_or_repeated_transfer (T1041)"
+    },
+    {
+      "alertId": "ex-06",
+      "action": "block",
+      "confidence": 1,
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, bulk_or_repeated_transfer, off_hours_archive_export (T1048)"
+    },
+    {
+      "alertId": "ex-07",
+      "action": "block",
+      "confidence": 0.98,
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, off_hours_archive_export (T1048)"
+    },
+    {
+      "alertId": "ex-08",
+      "action": "block",
+      "confidence": 1,
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, bulk_or_repeated_transfer (T1041)"
+    },
+    {
+      "alertId": "ex-09",
+      "action": "block",
+      "confidence": 0.96,
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, bulk_or_repeated_transfer (T1041)"
+    },
+    {
+      "alertId": "ex-10",
+      "action": "block",
+      "confidence": 1,
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, off_hours_archive_export (T1048)"
+    },
+    {
+      "alertId": "ex-11",
+      "action": "alert",
+      "confidence": 0.57,
+      "reason": "outbound_transfer, first_seen_destination, small_or_unconfirmed_transfer (T1048)"
+    },
+    {
+      "alertId": "ex-12",
+      "action": "alert",
+      "confidence": 0.59,
+      "reason": "outbound_transfer, first_seen_destination, small_or_unconfirmed_transfer (T1041)"
+    },
+    {
+      "alertId": "ex-13",
+      "action": "alert",
+      "confidence": 0.6,
+      "reason": "outbound_transfer, off_hours_archive_export, small_or_unconfirmed_transfer (T1048)"
+    },
+    {
+      "alertId": "ex-14",
+      "action": "alert",
+      "confidence": 0.57,
+      "reason": "outbound_transfer, first_seen_destination, small_or_unconfirmed_transfer (T1048)"
+    },
+    {
+      "alertId": "ex-15",
+      "action": "alert",
+      "confidence": 0.61,
+      "reason": "outbound_transfer, first_seen_destination, small_or_unconfirmed_transfer (T1041)"
+    },
+    {
+      "alertId": "ex-16",
+      "action": "alert",
+      "confidence": 0.57,
+      "reason": "outbound_transfer, first_seen_destination, small_or_unconfirmed_transfer (T1048)"
+    },
+    {
+      "alertId": "ex-17",
+      "action": "alert",
+      "confidence": 0.54,
+      "reason": "outbound_transfer, small_or_unconfirmed_transfer (T1041)"
+    },
+    {
+      "alertId": "ex-18",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "outbound_transfer, first_seen_destination, small_or_unconfirmed_transfer (T1048)"
+    },
+    {
+      "alertId": "ex-19",
+      "action": "alert",
+      "confidence": 0.57,
+      "reason": "outbound_transfer, first_seen_destination, small_or_unconfirmed_transfer (T1041)"
+    },
+    {
+      "alertId": "ex-20",
+      "action": "alert",
+      "confidence": 0.69,
+      "reason": "outbound_transfer, first_seen_destination, off_hours_archive_export, small_or_unconfirmed_transfer (T1048)"
+    },
+    {
+      "alertId": "ex-21",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    },
+    {
+      "alertId": "ex-22",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    },
+    {
+      "alertId": "ex-23",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    },
+    {
+      "alertId": "ex-24",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    },
+    {
+      "alertId": "ex-25",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    },
+    {
+      "alertId": "ex-26",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    },
+    {
+      "alertId": "ex-27",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    },
+    {
+      "alertId": "ex-28",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    },
+    {
+      "alertId": "ex-29",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    },
+    {
+      "alertId": "ex-30",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "맞는 패턴 없음: 정상 사건으로 기록"
+    }
+  ],
+  "counts": {
+    "block": 10,
+    "alert": 10,
+    "record": 10
+  }
+}

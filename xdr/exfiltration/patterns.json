@@ -1,0 +1,69 @@
+{
+  "schema": "aleph.xdr.patterns.v1",
+  "moduleKey": "exfiltration",
+  "knownDestinations": [
+    "192.0.2.10",
+    "198.51.100.10"
+  ],
+  "patterns": [
+    {
+      "name": "outbound_transfer",
+      "technique": "T1041, T1048",
+      "condition": {
+        "mitreAny": ["T1041", "T1048"],
+        "minLevel": 5,
+        "clearLevel": 12,
+        "baseConfidence": 0.5,
+        "levelWeight": 0.15
+      },
+      "evidence": "T1041·T1048: 명령 통로나 다른 프로토콜로 자료를 밖으로 보내는 것이 유출의 기본 모양이라, 수준 5 이상의 외부 전송 경보는 모두 사람 확인 대상으로 올립니다."
+    },
+    {
+      "name": "large_transfer",
+      "technique": "T1048",
+      "condition": {
+        "minBytes": 50000000,
+        "bonus": 0.2
+      },
+      "evidence": "T1048: 공격자는 한 번에 많은 자료를 옮기려 하므로, 한 경보에서 50MB 이상이 나간 전송은 평소 메모 읽기·저장(수 KB)과 뚜렷이 다릅니다."
+    },
+    {
+      "name": "first_seen_destination",
+      "technique": "T1048",
+      "condition": {
+        "descriptionAny": ["처음 보는", "외부 주소", "평소와 다른", "다른 주소"],
+        "orUnknownDestination": true,
+        "bonus": 0.05
+      },
+      "evidence": "T1048: 유출은 공격자가 마련한 바깥 서버로 가므로, 자료실·수업 자료 주소가 아닌 처음 보는 목적지는 유출 신호입니다."
+    },
+    {
+      "name": "bulk_or_repeated_transfer",
+      "technique": "T1041, T1030",
+      "condition": {
+        "filesAtLeast": 50,
+        "countAtLeast": 5,
+        "bonus": 0.1
+      },
+      "evidence": "T1041(T1030 자료 나눠 보내기 포함): 자료 수십 건을 한꺼번에, 또는 같은 목적지로 여러 번 나눠 보내는 것은 대량 반출의 흔적입니다."
+    },
+    {
+      "name": "off_hours_archive_export",
+      "technique": "T1048, T1560",
+      "condition": {
+        "descriptionAny": ["시간 밖", "압축 파일"],
+        "bonus": 0.1
+      },
+      "evidence": "T1048(T1560 자료 압축 포함): 공격자는 자료를 압축해 한 덩어리로 만들고 사람이 덜 보는 업무 시간 밖에 내보내곤 합니다."
+    },
+    {
+      "name": "small_or_unconfirmed_transfer",
+      "technique": "T1041, T1048",
+      "condition": {
+        "belowBytes": 50000000,
+        "maxConfidence": 0.8
+      },
+      "evidence": "T1041·T1048: 50MB 미만의 작은 전송·실패한 전송·아직 나가지 않은 압축은 정상 백업·과제 제출과 구분이 어려워, 차단하지 않고 최대 확신도 0.8로 알림만 남깁니다."
+    }
+  ]
+}

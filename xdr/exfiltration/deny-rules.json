@@ -1,0 +1,96 @@
+{
+  "schema": "aleph.xdr.deny-rules.v1",
+  "moduleKey": "exfiltration",
+  "rules": [
+    {
+      "ruleId": "xdr.exfiltration.deny.203.0.113.50",
+      "kind": "deny_destination",
+      "dstip": "203.0.113.50",
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, bulk_or_repeated_transfer (T1048)",
+      "startsAt": "2026-09-27T00:16:03.000Z",
+      "expiresAt": "2026-09-28T01:05:14.000Z",
+      "evidenceAlertIds": [
+        "ex-01",
+        "ex-03"
+      ]
+    },
+    {
+      "ruleId": "xdr.exfiltration.deny.198.51.100.40",
+      "kind": "deny_destination",
+      "dstip": "198.51.100.40",
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, off_hours_archive_export (T1048)",
+      "startsAt": "2026-09-27T00:16:48.000Z",
+      "expiresAt": "2026-09-28T01:20:07.000Z",
+      "evidenceAlertIds": [
+        "ex-02",
+        "ex-04"
+      ]
+    },
+    {
+      "ruleId": "xdr.exfiltration.deny.203.0.113.55",
+      "kind": "deny_destination",
+      "dstip": "203.0.113.55",
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, bulk_or_repeated_transfer (T1041)",
+      "startsAt": "2026-09-27T02:04:26.000Z",
+      "expiresAt": "2026-09-28T02:04:26.000Z",
+      "evidenceAlertIds": [
+        "ex-05"
+      ]
+    },
+    {
+      "ruleId": "xdr.exfiltration.deny.192.0.2.90",
+      "kind": "deny_destination",
+      "dstip": "192.0.2.90",
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, bulk_or_repeated_transfer, off_hours_archive_export (T1048)",
+      "startsAt": "2026-09-27T03:02:19.000Z",
+      "expiresAt": "2026-09-28T03:02:19.000Z",
+      "evidenceAlertIds": [
+        "ex-06"
+      ]
+    },
+    {
+      "ruleId": "xdr.exfiltration.deny.198.51.100.45",
+      "kind": "deny_destination",
+      "dstip": "198.51.100.45",
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, off_hours_archive_export (T1048)",
+      "startsAt": "2026-09-27T04:12:08.000Z",
+      "expiresAt": "2026-09-28T04:12:08.000Z",
+      "evidenceAlertIds": [
+        "ex-07"
+      ]
+    },
+    {
+      "ruleId": "xdr.exfiltration.deny.203.0.113.60",
+      "kind": "deny_destination",
+      "dstip": "203.0.113.60",
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, bulk_or_repeated_transfer (T1041)",
+      "startsAt": "2026-09-27T05:03:41.000Z",
+      "expiresAt": "2026-09-28T05:03:41.000Z",
+      "evidenceAlertIds": [
+        "ex-08"
+      ]
+    },
+    {
+      "ruleId": "xdr.exfiltration.deny.203.0.113.61",
+      "kind": "deny_destination",
+      "dstip": "203.0.113.61",
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, bulk_or_repeated_transfer (T1041)",
+      "startsAt": "2026-09-27T06:08:12.000Z",
+      "expiresAt": "2026-09-28T06:08:12.000Z",
+      "evidenceAlertIds": [
+        "ex-09"
+      ]
+    },
+    {
+      "ruleId": "xdr.exfiltration.deny.198.51.100.46",
+      "kind": "deny_destination",
+      "dstip": "198.51.100.46",
+      "reason": "outbound_transfer, large_transfer, first_seen_destination, off_hours_archive_export (T1048)",
+      "startsAt": "2026-09-27T07:01:05.000Z",
+      "expiresAt": "2026-09-28T07:01:05.000Z",
+      "evidenceAlertIds": [
+        "ex-10"
+      ]
+    }
+  ]
+}

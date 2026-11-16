@@ -1,0 +1,60 @@
+// 확인용 읽기 모듈입니다. decide.mjs 는 이 파일을 불러오지 않습니다.
+// xdr/fixtures/exfiltration.json 의 Wazuh 경보에서 시각·출발 주소·계정·규칙 수준·설명만 뽑습니다.
+// 원본 경보는 읽기만 하고, 비밀값처럼 보이는 문자열은 [가림] 으로 바꿔 출력합니다.
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+
+const FIXTURE = new URL('../fixtures/exfiltration.json', import.meta.url);
+
+const SECRET_LIKE = [
+  /(password|passwd|pwd|secret|token|api[_-]?key|authorization|bearer)\s*[:=]\s*\S+/gi,
+  /eyJ[\w-]+\.[\w-]+\.[\w-]+/g, // JWT 모양
+  /\b(sk|pk|sb)_[\w-]{12,}\b/g, // 서버·공개 키 모양
+  /\b[a-f0-9]{32,}\b/gi, // 긴 16진수 지문·키 모양
+];
+
+/**
+ * 비밀값처럼 보이는 문자열(비밀번호·토큰·키 모양)을 [가림] 으로 바꿉니다.
+ * @param {unknown} text 가릴 값. 문자열이 아니면 문자열로 바꾸고, 없으면 빈 문자열로 봅니다.
+ * @returns {string} 비밀값 모양을 가린 문자열
+ */
+export function maskSecrets(text) {
+  let out = String(text ?? '');
+  for (const pattern of SECRET_LIKE) out = out.replace(pattern, '[가림]');
+  return out;
+}
+
+/**
+ * Wazuh 경보 하나에서 확인에 필요한 칸(id·시각·출발 주소·계정·수준·설명)만 뽑고 비밀값을 가립니다.
+ * @param {object} alert 경보 묶음(fixture)의 경보 하나
+ * @returns {{id: string, timestamp: string, srcip: string, srcuser: string, level: number, description: string}} 뽑은 칸
+ */
+export function pickFields(alert) {
+  return {
+    id: maskSecrets(alert?.id),
+    timestamp: maskSecrets(alert?.timestamp),
+    srcip: maskSecrets(alert?.data?.srcip),
+    srcuser: maskSecrets(alert?.data?.srcuser),
+    level: Number(alert?.rule?.level ?? 0),
+    description: maskSecrets(alert?.rule?.description),
+  };
+}
+
+/**
+ * 경보 묶음 파일을 읽어 경보마다 pickFields 로 칸을 뽑습니다. 원본 파일은 고치지 않습니다.
+ * @param {URL|string} [path=FIXTURE] 읽을 경보 묶음 파일 위치. 빼면 이 모듈의 시험 경보 파일입니다.
+ * @returns {Promise<{total: number, rows: object[]}>} 경보 수와 뽑은 줄 목록
+ */
+export async function readAlerts(path = FIXTURE) {
+  const fixture = JSON.parse(await readFile(path, 'utf8'));
+  const alerts = Array.isArray(fixture?.alerts) ? fixture.alerts : [];
+  return { total: alerts.length, rows: alerts.map(pickFields) };
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const { total, rows } = await readAlerts();
+  for (const r of rows) {
+    console.log([r.id, r.timestamp, r.srcip, r.srcuser, `level ${r.level}`, r.description].join(' | '));
+  }
+  console.log(`경보 ${total}건, 뽑은 줄 ${rows.length}줄${total === rows.length ? ' (같음)' : ' (다름)'}`);
+}
