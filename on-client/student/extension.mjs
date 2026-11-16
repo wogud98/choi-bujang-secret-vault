@@ -753,7 +753,7 @@ function renderStatusView(input) {
   return root;
 }
 
-// ---------- 17단계 · renderAiConnection / renderExplanation(기초) ----------
+// ---------- 17단계 · renderAiConnection ----------
 // 두 함수 모두 부를 때마다 입력값만으로 새 요소를 만듭니다. 이전 점검·설명 결과를 모듈 변수에 저장하지 않으므로
 // 다시 점검해 성공하면 옛 오류 안내가 사라지고, idle 이 다시 오면(계정 연결 재확인 등) 옛 결과도 사라집니다.
 // 이 화면은 서버에 요청을 보내지 않고, 자동으로 다시 점검하지 않습니다. 열쇠·원문 오류는 입력에 없고 화면에도 쓰지 않습니다.
@@ -884,52 +884,197 @@ function renderAiConnectionView(input) {
   return root;
 }
 
-// renderExplanation 기초: 성공일 때만 바깥 요소에 data-student-explanation-event 를 붙입니다(18단계에서 넓힘).
+// ---------- 18단계 · renderExplanation(근거에 연결된 AI 사건 설명) ----------
+// 부를 때마다 입력값만으로 새 요소를 만듭니다. 이전 설명을 모듈 변수에 저장하지 않으므로 다른 기록을 고르거나
+// 다시 불러오거나 실패하면 이전 설명과 성공 표식(data-student-explanation-event)이 함께 사라집니다.
+// 성공 표식은 근거·규칙·상태를 현재 기록과 대조해 모두 맞을 때만 붙입니다. 없는 근거 ID는 만들어 맞추지 않습니다.
+// 실행 버튼은 만들지 않습니다. AI 설명·제안만으로 보안 조치는 실행되지 않습니다.
+
+const EXPLANATION_STATE_KEYS = [
+  { key: 'access', label: '접속' },
+  { key: 'session', label: '세션' },
+  { key: 'device', label: '기기' },
+];
+const EXPLANATION_ID = /^[A-Za-z0-9_.:-]{1,128}$/;
+const EXPLANATION_RECORDS_KEPT = '보안 기록은 그대로입니다. AI 설명 실패는 과제 실패가 아니며, 업무 앱 판정과 기록 목록은 계속 쓸 수 있습니다.';
+const EXPLANATION_MANUAL_RETRY = '이 화면은 자동으로 다시 요청하지 않습니다. 필요하면 보안 기록에서 설명 요청을 직접 다시 누르세요.';
+
+function explanationId(value) {
+  return typeof value === 'string' && EXPLANATION_ID.test(value) ? value : null;
+}
+
+// 현재 기록의 근거 id → 근거 글. id 가 없거나 중복이면 그 기록으로는 대조할 수 없습니다.
+function evidenceMap(event) {
+  const map = new Map();
+  if (!Array.isArray(event.evidence)) return null;
+  for (const item of event.evidence) {
+    const id = isObject(item) ? explanationId(item.id) : null;
+    if (!id || map.has(id)) return null;
+    map.set(id, textOr(item.text, '근거 글 없음'));
+  }
+  return map;
+}
+
+// 설명이 현재 기록과 맞는지 다시 대조합니다. 제공 코드가 먼저 검사하지만, 학생 화면도 맞지 않는 설명은 쓰지 않습니다.
+// 반환: { ok:true, evidence } 또는 { ok:false, reason, code }
+function bindExplanation(event, data) {
+  const fail = (reason, code = 'ON_AI_INVALID_OUTPUT') => ({ ok: false, reason, code });
+  if (!isObject(data)) return fail('설명 자료가 없습니다');
+  if (data.executed !== false) return fail('AI가 조치를 이미 실행했다고 답했습니다. 실행 여부를 확인할 수 없는 설명은 쓸 수 없습니다');
+  if (data.requiresHumanConfirmation !== true) return fail('사람 확인이 필요하다는 표시가 없습니다');
+  if (typeof data.summary !== 'string' || data.summary.trim() === '') return fail('AI 요약이 없습니다');
+  const evidence = evidenceMap(event);
+  if (!evidence || evidence.size === 0) return fail('현재 기록에 대조할 근거가 없습니다(근거 부족)');
+  const ids = data.evidenceIds;
+  if (!Array.isArray(ids) || ids.length === 0) return fail('설명이 인용한 근거 ID가 없습니다(근거 부족)');
+  if (new Set(ids).size !== ids.length) return fail('같은 근거 ID를 두 번 인용했습니다(근거가 맞지 않음)');
+  const missing = ids.filter((id) => !evidence.has(id));
+  if (missing.length > 0) return fail(`현재 기록에 없는 근거 ID를 인용했습니다(근거가 맞지 않음): ${missing.map((id) => explanationId(id) || '형식이 잘못된 ID').join(', ')}`);
+  const uncited = [...evidence.keys()].filter((id) => !ids.includes(id));
+  if (uncited.length > 0) return fail(`현재 기록의 근거를 빠짐없이 인용하지 않았습니다(근거 부족): ${uncited.join(', ')}`);
+  if (!Array.isArray(data.proposals)) return fail('제안 목록 형식을 확인할 수 없습니다');
+  const supported = Array.isArray(event.supportedActions) ? event.supportedActions : [];
+  for (const proposal of data.proposals) {
+    if (!isObject(proposal) || !explanationId(proposal.action)) return fail('제안 형식을 확인할 수 없습니다');
+    if (!supported.includes(proposal.action)) return fail(`연동 시스템이 지원하지 않는 조치를 제안했습니다: ${proposal.action}`);
+    const refs = Array.isArray(proposal.evidenceIds) ? proposal.evidenceIds : [];
+    if (refs.length === 0 || refs.some((id) => !evidence.has(id))) return fail(`제안 ${proposal.action}의 근거 ID가 현재 기록과 맞지 않습니다`);
+  }
+  return { ok: true, evidence };
+}
+
+function explanationBox(status, tone, lines) {
+  const box = node('div', null, `state state-${tone}`);
+  box.dataset.explanationStatus = status;
+  for (const line of lines) box.append(typeof line === 'string' ? node('p', line) : line);
+  return box;
+}
+
+function explanationList(title, items, emptyText) {
+  const wrap = node('div');
+  wrap.append(node('h5', title));
+  if (items.length === 0) {
+    wrap.append(node('p', emptyText));
+    return wrap;
+  }
+  const ul = node('ul');
+  for (const item of items) ul.append(node('li', item));
+  wrap.append(ul);
+  return wrap;
+}
+
+function explanationSuccess(root, event, eventId, explanation, checkedAt, evidence) {
+  const data = explanation.data;
+  root.dataset.studentExplanationEvent = eventId;
+  root.append(
+    explanationBox('ok', 'ok', ['설명 성공: 선택한 기록의 근거와 대조를 마친 AI 설명입니다(참고용).']),
+    fieldLine('사건 ID', eventId),
+    fieldLine('설명 시각(checkedAt)', formatCheckedAt(checkedAt)),
+  );
+  if (explanation.mode === 'demo') root.append(node('p', '예제 응답(demo)입니다. 실제 게이트 결과가 아닙니다.', 'tag tag-demo'));
+
+  root.append(node('h4', 'AI 설명(참고용)'), node('p', safeSummary(data.summary)));
+  root.append(node('p', 'AI 요약은 해석입니다. 사실 판단은 아래 근거 글과 연동 시스템이 알려 준 현재 상태로 하세요.', 'student-text'));
+
+  root.append(explanationList('인용한 근거', data.evidenceIds.map((id) => `${id} — ${evidence.get(id)}`), '없음'));
+
+  const rules = Array.isArray(event.rules) ? event.rules.filter(isObject) : [];
+  root.append(explanationList('규칙', rules.map((rule) => `${textOr(rule.id, 'ID 없음')} — ${textOr(rule.text, '규칙 글 없음')}`), '이 기록에 적용된 규칙이 없습니다.'));
+
+  const state = isObject(event.state) ? event.state : {};
+  const unknown = EXPLANATION_STATE_KEYS.filter(({ key }) => state[key] === 'unknown')
+    .map(({ label }) => `${label}: 확인 불가(unknown)`);
+  const stateList = explanationList('확인 불가 상태', unknown, '없음');
+  stateList.dataset.testid = 'student-explanation-unknown';
+  root.append(stateList);
+  if (unknown.length > 0) root.append(node('p', '확인 불가 상태는 정상이나 안전으로 보지 않습니다.', 'student-text'));
+
+  const proposals = data.proposals;
+  const supported = Array.isArray(event.supportedActions) ? event.supportedActions : [];
+  const proposalWrap = node('div');
+  proposalWrap.append(node('h5', 'AI 제안'));
+  if (proposals.length === 0) {
+    proposalWrap.append(node('p', supported.length === 0
+      ? '연동 시스템이 지원하는 조치가 없어 제안이 없습니다(정상).'
+      : 'AI가 제안한 조치가 없습니다. 필요하면 근거를 보고 담당자와 판단하세요.'));
+  } else {
+    const ul = node('ul');
+    for (const proposal of proposals) {
+      const li = node('li');
+      li.append(
+        node('p', `조치: ${proposal.action}`),
+        node('p', `이유: ${textOr(proposal.reason, '이유 없음')}`),
+        node('p', `근거 ID: ${proposal.evidenceIds.join(', ')}`),
+        node('p', '상태: 사람 확인이 필요하며 실행되지 않았습니다.'),
+      );
+      ul.append(li);
+    }
+    proposalWrap.append(ul);
+  }
+  proposalWrap.append(node('p', 'AI 설명·제안만으로 보안 조치는 실행되지 않습니다. 이 화면에는 실행 버튼이 없습니다.', 'student-text'));
+  root.append(proposalWrap);
+}
+
 function renderExplanationView(input) {
   const safe = isObject(input) ? input : {};
   const event = isObject(safe.event) ? safe.event : null;
   const explanation = isObject(safe.explanation) ? safe.explanation : {};
-  const eventId = event && typeof event.id === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(event.id) ? event.id : null;
+  const eventId = event ? explanationId(event.id) : null;
   const root = node('section', null, 'student-explanation-view');
   root.dataset.testid = 'student-explanation-view';
   root.append(node('h3', 'AI 사건 설명'));
 
-  if (explanation.status === 'ok') {
-    const summary = isObject(explanation.data) ? explanation.data.summary : null;
-    if (eventId && typeof summary === 'string' && summary.trim() !== '') {
-      root.dataset.studentExplanationEvent = eventId;
-      root.append(
-        node('p', '사건 설명 결과: 선택한 사건에 대해 AI가 설명을 돌려주었습니다(참고용).', 'state state-ok'),
-        fieldLine('사건 ID', eventId),
-        fieldLine('AI 요약', safeSummary(summary)),
-        fieldLine('설명 시각(checkedAt)', formatCheckedAt(safe.checkedAt)),
-      );
-      if (explanation.mode === 'demo') root.append(node('p', '예제 응답(demo)입니다. 실제 게이트 결과가 아닙니다.', 'tag tag-demo'));
-      root.append(node('p', '요약은 AI의 해석입니다. 사실 판단은 보안 기록의 근거를 기준으로 하세요. 조치는 자동 실행하지 않습니다.', 'student-text'));
-      return root;
-    }
-    root.append(node('p', '확인 불가: 설명 응답에 사건 ID나 요약이 없어 결과로 보지 않습니다. 보안 기록은 그대로 유지됩니다.', 'state state-empty'));
-    return root;
-  }
+  // 1) 실패는 event 가 null 이어도 먼저 보여 줍니다.
   if (explanation.status === 'error') {
     const error = isObject(explanation.error) ? explanation.error : {};
     const group = aiErrorGroup(error.code);
-    const box = aiStateBox('error', group.kind === 'cancelled' ? 'empty' : 'error', [
-      `AI 설명 실패(${group.title})`,
+    const invalidOutput = error.code === 'ON_AI_INVALID_OUTPUT';
+    const box = explanationBox('error', group.kind === 'cancelled' ? 'empty' : 'error', [
+      `AI 설명 실패: ${invalidOutput ? '근거 불일치·쓸 수 없는 설명' : group.title}`,
       fieldLine('오류 코드(code)', safeCode(error.code)),
       fieldLine('안내(message)', safeAiMessage(error.message)),
-      eventId ? fieldLine('대상 사건 ID', eventId) : '대상 사건: 확인 불가',
-      '보안 기록은 그대로 유지됩니다. 필요하면 보안 기록에서 설명 요청을 직접 다시 누르세요.',
+      invalidOutput
+        ? '실패 이유: 설명의 근거 ID가 이 기록과 맞지 않거나(근거 부족·불일치), 지원하지 않는 조치를 제안했거나, AI가 이미 실행했다고 답하는 등 쓸 수 없는 설명이었습니다. 내용은 표시하지 않습니다.'
+        : `실패 이유: ${group.title}. 할 일: ${group.guide}`,
+      eventId ? fieldLine('대상 사건 ID', eventId) : '대상 사건: 선택된 기록 없음',
+      EXPLANATION_RECORDS_KEPT,
+      EXPLANATION_MANUAL_RETRY,
     ]);
     box.setAttribute('role', 'alert');
     root.append(box);
     return root;
   }
-  if (explanation.status === 'loading') {
-    root.append(node('p', `AI 설명 요청 중${eventId ? `: 사건 ${eventId}` : ''}. 아직 결과가 아닙니다.`, 'state state-loading'));
+  if (!event) {
+    root.append(explanationBox('no-event', 'empty', ['보안 기록에서 기록을 먼저 고르세요. 기록을 고른 뒤 설명 요청을 직접 누르면 AI 설명을 받습니다.']));
     return root;
   }
-  root.append(node('p', '사건 설명 전: 보안 기록에서 사건을 골라 AI 설명을 직접 요청하세요. AI 연결 점검만으로는 사건 설명이 실행되지 않습니다.', 'state state-empty'));
+  if (!eventId) {
+    root.append(explanationBox('unverified', 'empty', ['확인 불가: 선택한 기록의 사건 ID 형식을 확인할 수 없어 설명을 붙이지 않습니다.', EXPLANATION_RECORDS_KEPT]));
+    return root;
+  }
+  if (explanation.status === 'loading') {
+    root.append(explanationBox('loading', 'loading', [`설명 요청 중: 사건 ${eventId}. 아직 결과가 아닙니다.`]));
+    return root;
+  }
+  if (explanation.status === 'ok') {
+    const binding = bindExplanation(event, explanation.data);
+    if (!binding.ok) {
+      const box = explanationBox('mismatch', 'error', [
+        'AI 설명 실패: 이 설명은 쓸 수 없습니다.',
+        `실패 이유: ${binding.reason}.`,
+        fieldLine('오류 코드(code)', binding.code),
+        fieldLine('대상 사건 ID', eventId),
+        '근거가 맞지 않는 내용은 표시하지 않고, 근거를 지어내지 않습니다.',
+        EXPLANATION_RECORDS_KEPT,
+      ]);
+      box.setAttribute('role', 'alert');
+      root.append(box);
+      return root;
+    }
+    explanationSuccess(root, event, eventId, explanation, safe.checkedAt, binding.evidence);
+    return root;
+  }
+  root.append(explanationBox('idle', 'empty', [`설명 요청 전: 사건 ${eventId}. 보안 기록에서 설명 요청을 직접 누르세요.`]));
   return root;
 }
 
