@@ -1,0 +1,63 @@
+{
+  "schema": "aleph.xdr.patterns.v1",
+  "moduleKey": "privilege",
+  "source": "MITRE ATT&CK T1068 Exploitation for Privilege Escalation (https://attack.mitre.org/techniques/T1068/), T1078 Valid Accounts (https://attack.mitre.org/techniques/T1078/)",
+  "patterns": [
+    {
+      "name": "privilege_change",
+      "technique": "T1068, T1078",
+      "condition": {
+        "mitreAny": ["T1068", "T1078"],
+        "minLevel": 5,
+        "clearLevel": 12,
+        "baseConfidence": 0.5,
+        "levelWeight": 0.15
+      },
+      "evidence": "T1068·T1078: 권한 상승 시도나 정상 계정의 권한 변경은 계정 도용과 권한 가로채기의 출발점이라, 수준 5 이상의 권한 경보는 모두 사람 확인 대상으로 올립니다."
+    },
+    {
+      "name": "admin_group_addition",
+      "technique": "T1078",
+      "condition": {
+        "mitreAny": ["T1078"],
+        "groupAny": ["administrators"],
+        "descriptionAny": ["관리자 그룹에 추가", "관리자 그룹에 들어", "다시 관리자로"],
+        "bonus": 0.2,
+        "repeatAtLeast": 2,
+        "repeatBonus": 0.1
+      },
+      "evidence": "T1078(정상 계정 도용): 손에 넣은 평범한 계정을 관리자 그룹에 넣으면 정상 계정처럼 보이면서 높은 권한을 얻으므로, 관리자 그룹 추가(여러 계정·빠졌다 다시 들어옴은 더 뚜렷함)는 권한 가로채기의 대표 신호입니다."
+    },
+    {
+      "name": "first_seen_admin_command",
+      "technique": "T1068, T1078",
+      "condition": {
+        "mitreAny": ["T1068", "T1078"],
+        "descriptionAny": ["처음 보는", "처음 봅니다", "방금 관리자가 된", "곧바로 권한 명령", "다른 계정의 권한"],
+        "bonus": 0.2
+      },
+      "evidence": "T1068·T1078: 처음 보는 주소에서의 관리자 명령, 방금 관리자가 된 계정이나 남의 계정 권한으로 실행한 관리자 명령은 평소 사용 이력에 없는 권한 사용이라 도용된 권한일 가능성이 큽니다."
+    },
+    {
+      "name": "off_hours_privilege_use",
+      "technique": "T1078",
+      "condition": {
+        "mitreAny": ["T1068", "T1078"],
+        "descriptionAny": ["수업 시간 밖", "업무 시간 밖", "업무처럼 보이지 않는 시각"],
+        "workStartHour": 8,
+        "workEndHour": 20,
+        "bonus": 0.2
+      },
+      "evidence": "T1078 탐지(평소 사용 시간과 비교): 도용된 정상 계정은 주인이 쓰지 않는 업무 시간 밖에 쓰이는 일이 많아, 업무 시간 밖 권한 사용은 계정 도용 신호입니다."
+    },
+    {
+      "name": "privilege_unconfirmed",
+      "technique": "T1068, T1078",
+      "condition": {
+        "descriptionAny": ["취소됐", "관리자 그룹은 아닙니다", "변경은 없습니다", "명령은 없습니다", "실패", "평소 주소", "설명만 바뀌"],
+        "maxConfidence": 0.8
+      },
+      "evidence": "T1068·T1078 탐지: 권한 상승이 취소·실패했거나, 관리자 그룹이 아니거나, 평소 주소에서 한 번뿐인 권한 사용은 수업 작업일 수 있어 막지 않고 사람 확인(알림)으로 넘깁니다."
+    }
+  ]
+}
